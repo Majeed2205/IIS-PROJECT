@@ -1,10 +1,11 @@
-"""A short walk through the calendar and booking function.
+"""A short walk through the calendar, booking function and repair policy.  Status: implemented.
 
 Run from the repository root:  python -m assistant.demo
 """
 from __future__ import annotations
 
 from .booking import BookingDesk, describe
+from .policy import STRATEGIES, Request, decide
 from .slots import Calendar, spoken_time
 
 
@@ -28,6 +29,12 @@ def main() -> None:
     print("\nSaturday afternoon:")
     saturday = calendar.find_free("saturday", earliest="12:00")
     print("  Free slots found:", len(saturday), "(the assistant must decline, not invent one)")
+
+    print('\nRepair policy, fresh calendar. Caller: "A haircut on Friday after five"')
+    request = Request(service="haircut", day="friday", earliest="17:00")
+    for strategy in STRATEGIES:
+        action = decide(request, strategy, Calendar.load())
+        print(f"  {strategy:<9} -> {action.kind}: {action.say}")
 
 
 if __name__ == "__main__":

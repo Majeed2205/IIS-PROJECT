@@ -1,4 +1,4 @@
-"""Salon availability.
+"""Salon availability.  Status: implemented (the calendar itself is a mock).
 
 The calendar is the only source of truth for which appointment slots exist
 and which are free. The assistant must look slots up here and never invent one.

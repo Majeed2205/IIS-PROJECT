@@ -1,4 +1,4 @@
-"""The booking function.
+"""The booking function.  Status: implemented.
 
 This is the only code that changes the calendar. It returns a BookingResult
 saying what actually happened, and describe() turns that result into the
