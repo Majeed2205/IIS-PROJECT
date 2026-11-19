@@ -14,7 +14,7 @@ def main() -> None:
     desk = BookingDesk(calendar)
 
     print('Caller: "Can I come in on Friday after five?"')
-    options = calendar.find_free("friday", earliest="17:00")
+    options = calendar.find_free("friday", earliest="17:01")
     print("Free slots found:", ", ".join(spoken_time(s.time) for s in options))
 
     print("\nBook a haircut on Friday at 5:30 pm:")
@@ -31,7 +31,7 @@ def main() -> None:
     print("  Free slots found:", len(saturday), "(the assistant must decline, not invent one)")
 
     print('\nRepair policy, fresh calendar. Caller: "A haircut on Friday after five"')
-    request = Request(service="haircut", day="friday", earliest="17:00")
+    request = Request(service="haircut", day="friday", earliest="17:01")
     for strategy in STRATEGIES:
         action = decide(request, strategy, Calendar.load())
         print(f"  {strategy:<9} -> {action.kind}: {action.say}")

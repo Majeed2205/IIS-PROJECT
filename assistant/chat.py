@@ -1,0 +1,192 @@
+"""The conversation loop. Keeps track of the call from turn to turn.
+
+Status: implemented. Typed input in the terminal:  python -m assistant.chat clarify
+"""
+from __future__ import annotations
+
+import sys
+from dataclasses import replace
+
+from .booking import BOOKED, BookingDesk, describe
+from .policy import ASK_AGAIN, BOOK, CONFIRM, HANDOVER, STRATEGIES, Request, decide
+from .slots import Calendar
+from .understand import understand
+
+WHICH_PART = "Which part should I change: the service, the day or the time?"
+GIVE_UP = "I'm sorry, I'm having trouble understanding. I'll ask a member of staff to call you back."
+MAX_NOT_UNDERSTOOD = 3  # turns in a row before handing over (simulated, like the repeat handover)
+
+
+class Conversation:
+    def __init__(self, calendar: Calendar, strategy: str, call_id: str = "call-1"):
+        if strategy not in STRATEGIES:
+            raise ValueError(f"Unknown strategy: {strategy!r}")
+        self.calendar = calendar
+        self.desk = BookingDesk(calendar)
+        self.strategy = strategy
+        self.call_id = call_id
+        self.request = Request()
+        self.last_action = None
+        self.asked_which_part = False
+        self.repeats_asked = 0
+        self.not_understood = 0  # turns in a row we could not understand
+        self.booking = None    # the BookingResult once the caller is booked
+        self.finished = False  # True after a handover
+
+    def reply(self, text: str) -> str:
+        """Take one caller turn and return what the assistant says."""
+        first_turn = self.request == Request()  # the caller has not asked for anything yet
+        heard = understand(text, self.calendar.services, first_turn)
+
+        if self.finished:
+            return "This call has ended."
+
+        # Already booked: saying "yes" or "book it" again must not book twice.
+        if self.booking is not None:
+            if heard["yes"]:
+                return self.book(self.booking.day, self.booking.time)
+            return "You're all booked. Thank you for calling."
+
+        last = self.last_action
+        after_read_back = last is not None and last.kind == CONFIRM
+
+        # Outside a read-back, "no 5:30" may mean "not 5:30", so ignore it and ask again.
+        if heard["no"] and not after_read_back and not self.asked_which_part:
+            heard = understand("", self.calendar.services)
+            heard["unclear"] = True
+
+        # Answer to a read-back (summarise).
+        if after_read_back:
+            if heard["yes"] and agrees(heard, last.slot, self.request.service):
+                return self.book(last.slot.day, last.slot.time)
+            # A plain "no" (rule 6). "No, wrong time" is handled below as a correction.
+            if heard["no"] and not has_details(heard) and not heard["parts"]:
+                self.last_action = None
+                self.asked_which_part = True
+                self.not_understood = 0
+                return WHICH_PART
+
+        old_request = self.request
+        self.update_request(heard)
+        self.asked_which_part = False
+
+        action = decide(self.request, self.strategy, self.calendar, self.repeats_asked)
+        self.last_action = action
+        if action.kind == BOOK:
+            return self.book(action.slot.day, action.slot.time)
+        if action.kind == ASK_AGAIN:
+            self.repeats_asked += 1
+        if action.kind == HANDOVER:
+            self.finished = True
+            return action.say
+
+        # Rule 7: the last turn was not understood, so nothing changed.
+        if heard["unclear"] and self.request == old_request:
+            self.not_understood += 1
+            if self.not_understood >= MAX_NOT_UNDERSTOOD:
+                self.finished = True
+                return GIVE_UP
+            if action.kind != ASK_AGAIN:
+                return "Sorry, I didn't catch that. " + action.say
+        else:
+            self.not_understood = 0
+        return action.say
+
+    def update_request(self, heard: dict) -> None:
+        """Change only the details the caller just gave (rule 5)."""
+        request = self.request
+        has_time = heard["time"] or heard["earliest"] or heard["latest"]
+
+        if heard["service"]:
+            request = replace(request, service=heard["service"])
+        if heard["day"]:
+            request = replace(request, day=heard["day"])
+        if has_time:
+            request = replace(request, time=heard["time"], earliest=heard["earliest"], latest=heard["latest"])
+
+        # "the day" (after "which part?") or "no, wrong day": forget it so it gets asked again.
+        if self.asked_which_part or heard["no"]:
+            if "service" in heard["parts"] and not heard["service"]:
+                request = replace(request, service=None)
+            if "day" in heard["parts"] and not heard["day"]:
+                request = replace(request, day=None)
+            if "time" in heard["parts"] and not has_time:
+                request = replace(request, time=None, earliest=None, latest=None)
+
+        # Picking one of the slots we just offered, e.g. "6:15", "the second one" or "4 pm".
+        slot = self.pick_option(heard)
+        if slot is not None:
+            request = replace(request, day=slot.day, time=slot.time, earliest=None, latest=None)
+
+        self.request = request
+
+    def pick_option(self, heard: dict):
+        """Return the offered slot the caller chose, or None."""
+        if self.last_action is None or not self.last_action.options:
+            return None
+        options = self.last_action.options
+
+        # If a time was said too ("the first one after six"), the time decides.
+        has_time = heard["time"] or heard["earliest"] or heard["latest"]
+        choice = heard["choice"]
+        if choice is not None and not has_time and choice < len(options) and heard["day"] in (None, options[choice].day):
+            return options[choice]
+        if heard["time"] is not None:
+            matches = [s for s in options if s.time == heard["time"] and heard["day"] in (None, s.day)]
+            if len(matches) == 1:
+                return matches[0]
+        if heard["yes"] and len(options) == 1:
+            return options[0]
+        return None
+
+    def book(self, day: str, time: str) -> str:
+        """Book through the booking desk and say what really happened."""
+        # Same call and same slot gives the same id, so a repeat is never booked twice.
+        request_id = f"{self.call_id}-{day}-{time}"
+        result = self.desk.book(request_id, self.request.service, day, time)
+        if result.status == BOOKED:
+            self.booking = result
+        return describe(result)
+
+
+def has_details(heard: dict) -> bool:
+    keys = ("service", "day", "time", "earliest", "latest", "choice")
+    return any(heard[key] is not None for key in keys)
+
+
+def agrees(heard: dict, slot, service: str) -> bool:
+    """True if nothing the caller said goes against the read-back."""
+    if heard["service"] not in (None, service):
+        return False
+    if heard["day"] not in (None, slot.day):
+        return False
+    if heard["time"] not in (None, slot.time):
+        return False
+    if heard["earliest"] is not None and slot.time < heard["earliest"]:
+        return False
+    if heard["latest"] is not None and slot.time > heard["latest"]:
+        return False
+    return heard["choice"] is None and not heard["parts"]
+
+
+def main() -> None:
+    strategy = sys.argv[1] if len(sys.argv) > 1 else "clarify"
+    if strategy not in STRATEGIES:
+        print("Usage: python -m assistant.chat [repeat | clarify | summarise]")
+        return
+
+    chat = Conversation(Calendar.load(), strategy)
+    print(f"Demo Salon booking assistant ({strategy}). Type 'quit' to stop.")
+    print("Assistant: Hello, Demo Salon. How can I help?")
+    while not chat.finished:
+        try:
+            text = input("You: ")
+        except EOFError:
+            break
+        if text.strip().lower() in ("quit", "exit"):
+            break
+        print("Assistant:", chat.reply(text))
+
+
+if __name__ == "__main__":
+    main()

@@ -42,7 +42,7 @@ class SpecPhraseTests(unittest.TestCase):
 
     def test_2_service_missing_and_time_ambiguous(self):
         # "Can I come in on Friday after five?"
-        request = Request(day="friday", earliest="17:00")
+        request = Request(day="friday", earliest="17:01")
         for strategy in STRATEGIES:
             action = decide(request, strategy, self.calendar)
             self.assertEqual(action.kind, ASK)
@@ -51,14 +51,14 @@ class SpecPhraseTests(unittest.TestCase):
 
     def test_3_clarify_offers_both_times(self):
         # "A haircut on Friday after five"
-        request = Request(service="haircut", day="friday", earliest="17:00")
+        request = Request(service="haircut", day="friday", earliest="17:01")
         action = decide(request, "clarify", self.calendar)
         self.assertEqual(action.kind, CLARIFY)
         self.assertEqual([s.time for s in action.options], ["17:30", "18:15"])
         self.assertEqual(action.say, "On Friday after 5 pm I have 5:30 pm or 6:15 pm. Which would you like?")
 
     def test_3_repeat_asks_again_then_hands_over(self):
-        request = Request(service="haircut", day="friday", earliest="17:00")
+        request = Request(service="haircut", day="friday", earliest="17:01")
         self.assertEqual(decide(request, "repeat", self.calendar, repeats_asked=0).kind, ASK_AGAIN)
         self.assertEqual(decide(request, "repeat", self.calendar, repeats_asked=1).kind, ASK_AGAIN)
         action = decide(request, "repeat", self.calendar, repeats_asked=2)
@@ -69,7 +69,7 @@ class SpecPhraseTests(unittest.TestCase):
         )
 
     def test_3_summarise_reads_back_the_earliest(self):
-        request = Request(service="haircut", day="friday", earliest="17:00")
+        request = Request(service="haircut", day="friday", earliest="17:01")
         action = decide(request, "summarise", self.calendar)
         self.assertEqual(action.kind, CONFIRM)
         self.assertEqual(action.slot.time, "17:30")
@@ -260,8 +260,8 @@ class SafetyTests(unittest.TestCase):
 
     REQUESTS = [
         Request(),
-        Request(day="friday", earliest="17:00"),
-        Request(service="haircut", day="friday", earliest="17:00"),
+        Request(day="friday", earliest="17:01"),
+        Request(service="haircut", day="friday", earliest="17:01"),
         Request(service="haircut", day="friday", time="19:00"),
         Request(service="colour", day="saturday", earliest="12:00", latest="16:59"),
         Request(service="haircut", day="sunday", time="10:00"),

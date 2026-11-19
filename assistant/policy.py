@@ -5,8 +5,8 @@ has asked for so far, the repair strategy and the calendar, and returns one
 Action: what the assistant should do next and the words it should say.
 
 decide() is a pure function. It never changes the calendar and never books
-anything: a BOOK action is carried out by the conversation loop (step 3,
-planned), which calls BookingDesk.book() and speaks describe(result).
+anything: a BOOK action is carried out by the conversation loop (chat.py),
+which calls BookingDesk.book() and speaks describe(result).
 A language model never decides what happens next; it may only fill in a
 Request (step 4, planned).
 """
@@ -44,9 +44,9 @@ class Request:
     """What the caller has asked for so far. None means "not said yet".
 
     The time is either exact (time="17:30") or a range. Both ends of a range
-    are included, as in Calendar.find_free(): "after five" is earliest="17:00",
-    "before five" is latest="16:59", and "afternoon" is
-    earliest, latest = DAY_PARTS["afternoon"].
+    are included, as in Calendar.find_free(). "After five" and "before five"
+    both leave 5 pm out, so they are earliest="17:01" and latest="16:59".
+    "Afternoon" is earliest, latest = DAY_PARTS["afternoon"].
     """
     service: str | None = None
     day: str | None = None
@@ -169,7 +169,8 @@ def _when(day: str, earliest: str | None, latest: str | None) -> str:
     if earliest is not None and latest is not None:
         return f"{day} between {spoken_time(earliest)} and {spoken_time(latest)}"
     if earliest is not None:
-        return f"{day} after {spoken_time(earliest)}"
+        # earliest is included, so earliest="17:01" is spoken as "after 5 pm".
+        return f"{day} after {spoken_time(_clock(_minutes(earliest) - 1))}"
     if latest is not None:
         # latest is included, so latest="16:59" is spoken as "before 5 pm".
         return f"{day} before {spoken_time(_clock(_minutes(latest) + 1))}"
