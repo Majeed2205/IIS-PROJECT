@@ -31,6 +31,9 @@ NO_WORDS = ["no", "nope", "nah", "not", "never", "nothing", "none", "wrong", "in
 # A turn starting like this asks about something ("is that Friday?"), it is not a request.
 QUESTION_STARTS = ["is", "are", "was", "were", "did", "do", "does", "anything", "any"]
 QUESTION_WORDS = ["what", "which", "when", "where", "how", "why"]
+# A "?" makes a question too ("You said Friday?"), unless the turn asks for something:
+# "Can I come in on Sunday?", "Would you have the 6:15?" or "Friday at 5:30 please?".
+REQUEST_WORDS = ["can", "could", "may", "would"]
 
 # Words that can go with a yes, as in "yes please, that's great".
 YES_FILLER = ["please", "that", "it", "is", "a", "an", "the", "on", "for", "then", "great", "lovely",
@@ -68,9 +71,11 @@ def understand(text: str, services: list[str], first_turn: bool = False) -> dict
     rest = words[1:] if starts_with_no else words
     heard["no"] = starts_with_no or any(is_negative(word) for word in words)
 
+    is_question = (len(words) > 0 and words[0] in QUESTION_STARTS) or any(w in QUESTION_WORDS for w in words)
+    if "?" in text and not asks_for_something(words):
+        is_question = True
     # We only act on a turn if we know every word in it. A "no" or "not" in the
     # middle is not a known word, because we can't tell what is being turned down.
-    is_question = (len(words) > 0 and words[0] in QUESTION_STARTS) or any(w in QUESTION_WORDS for w in words)
     unknown = any(not is_known(word, service_words) for word in rest)
     if is_question or unknown:
         return unclear(heard)
@@ -266,3 +271,13 @@ def only_yes_words(words: list[str], heard: dict, service_words: list[str]) -> b
             continue
         return False
     return True
+
+
+def asks_for_something(words: list[str]) -> bool:
+    """True for "can I come in on Sunday" or "Friday at 5:30 please", not for "you said I can come Friday"."""
+    if "said" in words:
+        return False
+    for word, after in zip(words, words[1:]):
+        if word in REQUEST_WORDS and after in ("i", "you"):
+            return True
+    return len(words) > 0 and words[-1] == "please" and not any(w in QUESTION_STARTS for w in words)

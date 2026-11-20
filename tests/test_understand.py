@@ -129,7 +129,7 @@ class WordTests(unittest.TestCase):
                      "ok, just a second", "Friday's fine", "The haircut's fine", "5:30 is ok", "right?", "ok?",
                      "Don't book it yet", "wait", "I don't think that's right", "OK, let me check my diary",
                      "Right, I'll call back later", "ok one sec", "fine, six then", "Yes, but later",
-                     "OK, but tomorrow", "Sure, I can’t do 5:30 though"]:
+                     "OK, but tomorrow", "Sure, I can’t do 5:30 though", "Yes please?"]:
             self.assertFalse(hear(text)["yes"], text)
 
     def test_no(self):
@@ -157,6 +157,19 @@ class WordTests(unittest.TestCase):
         self.assertEqual(hear("after six")["earliest"], "18:01")
         self.assertEqual(hear("just after 4")["earliest"], "16:01")
         self.assertEqual(hear("before five")["latest"], "16:59")
+
+    def test_a_question_mark_makes_a_question(self):
+        for text in ["You said Friday?", "That's Friday?", "Friday at 5:30?", "6:15, is it?", "The first one?", "6:15?",
+                     "You said Friday? OK", "I said Friday?", "You have the 6:15?", "Is that Friday?",
+                     "You said I can come Friday?", "I can have the 6:15?", "Can I? You said Friday?",
+                     "Please, is it Friday?", "OK, is that Friday please?", "Friday please, right?"]:
+            self.assertTrue(heard_nothing(hear(text)), text)
+            self.assertTrue(hear(text)["unclear"], text)
+        # A "?" can still ask for something.
+        for text in ["Can I come in on Sunday?", "Could I have a haircut on Friday?", "May I book a haircut?",
+                     "Would you have the 6:15?", "Friday at 5:30 please?",
+                     "Good afternoon, can I book a haircut on Friday?", "Friday, can I?"]:
+            self.assertFalse(hear(text)["unclear"], text)
 
     def test_which_part(self):
         self.assertEqual(hear("the day")["parts"], ["day"])

@@ -412,6 +412,27 @@ class SafetyTests(unittest.TestCase):
             self.assertEqual(chat.reply(answer), offer, answer)
             self.assertIsNone(chat.booking, answer)
 
+    def test_a_question_books_nothing(self):
+        cases = [
+            ("clarify", "A haircut on Thursday after six", "You said Friday?"),
+            ("clarify", "A haircut on Thursday after six", "You said I can come Friday?"),
+            ("clarify", "A haircut on Thursday after six", "Friday at 5:30?"),
+            ("clarify", "A haircut on Friday after five", "6:15?"),
+            ("clarify", "A haircut on Friday after five", "The first one?"),
+            ("repeat", "A haircut on Friday after five", "6:15, is it?"),
+        ]
+        for strategy, first, question in cases:
+            chat = Conversation(Calendar.load(), strategy)
+            said = chat.reply(first)
+            again = said if strategy == "repeat" else "Sorry, I didn't catch that. " + said
+            self.assertEqual(chat.reply(question), again, question)
+            self.assertIsNone(chat.booking, question)
+
+    def test_a_request_with_a_question_mark_still_books(self):
+        chat = Conversation(Calendar.load(), "clarify")
+        chat.reply("A haircut on Friday after five")
+        self.assertEqual(chat.reply("Could I have the 6:15?"), "Booked: haircut on Friday at 6:15 pm.")
+
     def test_a_no_outside_a_read_back_changes_nothing(self):
         cases = [
             ([], "No, a haircut on Friday at half five", "Which day would you like to come in?"),

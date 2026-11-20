@@ -471,7 +471,7 @@ class ChatWithModelTests(unittest.TestCase):
             ("repeat", ["A haircut on Friday after five"]),
         ]
         not_understood = ["5:30, no wait, 6:15", "I can't do Monday", "I cannot do Monday", "That's incorrect",
-                          "I'm busy at 5:30", "Is that Friday?", "Monday and Tuesday", "Monday 11",
+                          "I'm busy at 5:30", "Is that Friday?", "You said Friday?", "Monday and Tuesday", "Monday 11",
                           "Sometime next week", "Yeah no"]
         # The model says it is unsure, or gives an answer that can't be used.
         model_answers = [answer(unclear=True), answer(no=True, day="someday"), answer(no="yes"),
@@ -646,6 +646,7 @@ SPEC_READINGS = {
     "monday 11": {"unclear": True},
     "good afternoon, can i book a haircut on friday?": {"service": "haircut", "day": "friday"},
     "is 6:15 the latest?": {"unclear": True},
+    "you said friday?": {"unclear": True},  # a question about something, not a request (rule 7)
     "thursday at 10 in the morning": {"day": "thursday", "time": "10:00", "earliest": ANY, "latest": ANY},
     # More phrases from the spec
     "is that friday?": {"unclear": True},

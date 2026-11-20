@@ -520,5 +520,17 @@
     "time_kind": "",
     "unclear": false,
     "yes": true
+  },
+  "you said friday?": {
+    "change": [],
+    "choice": "",
+    "clock": "",
+    "day": "",
+    "no": false,
+    "part_of_day": "",
+    "service": "",
+    "time_kind": "",
+    "unclear": true,
+    "yes": false
   }
 }

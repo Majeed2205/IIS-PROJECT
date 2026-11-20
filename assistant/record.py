@@ -46,6 +46,7 @@ PHRASES = [
     "Monday 11",
     "Good afternoon, can I book a haircut on Friday?",
     "Is 6:15 the latest?",
+    "You said Friday?",
     "Thursday at 10 in the morning",
     # More phrases from the spec: rules 7 to 9 and the time words.
     "Is that Friday?",
