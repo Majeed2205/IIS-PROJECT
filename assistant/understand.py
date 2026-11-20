@@ -1,7 +1,7 @@
 """Turns what the caller typed into the details the policy needs.
 
-Status: simulated. This is a simple keyword reader that stands in for the
-understanding step (step 4), which will use a language model instead.
+Status: simulated. A simple keyword reader, used when model.py has no saved
+or live model answer for a sentence.
 
 It only acts on a turn when it knows every word in it. Otherwise it hears
 nothing and the assistant asks again: an extra question is better than a
@@ -24,8 +24,10 @@ TIME_WORDS = ["at", "half", "past", "after", "before", "around", "about"]
 
 YES_WORDS = ["yes", "yeah", "yep", "yup", "correct", "right", "sure", "ok", "okay", "fine", "perfect"]
 YES_PHRASES = ["book it", "go ahead", "sounds good"]
-NO_WORDS = ["no", "nope", "nah", "not", "wrong", "nothing", "never",
-            "dont", "cant", "isnt", "doesnt", "wont", "wasnt", "didnt", "couldnt"]
+# The "no" words in rule 6 of the spec. Any word ending in "n't" counts too (is_negative).
+NO_WORDS = ["no", "nope", "nah", "not", "never", "nothing", "none", "wrong", "incorrect", "cannot",
+            "dont", "cant", "isnt", "arent", "wasnt", "werent", "doesnt", "didnt", "wont", "wouldnt",
+            "couldnt", "shouldnt", "havent", "hasnt", "hadnt", "aint", "mustnt", "neednt", "mightnt", "shant"]
 # A turn starting like this asks about something ("is that Friday?"), it is not a request.
 QUESTION_STARTS = ["is", "are", "was", "were", "did", "do", "does", "anything", "any"]
 QUESTION_WORDS = ["what", "which", "when", "where", "how", "why"]
@@ -204,7 +206,9 @@ def find_time(words: list[str]) -> tuple[str | None, str | None]:
         else:
             found.append(("at", f"{hour:02d}:{minute:02d}"))
 
-    if left_over or len(set(found)) > 1:
+    # "after" and "before" must come just before a time, so "after Monday" and "after the 5:30" are unclear.
+    ranges = [kind for kind, _ in found if kind != "at"]
+    if left_over or len(set(found)) > 1 or len(ranges) < words.count("after") + words.count("before"):
         return "unclear", None
     if found:
         return found[0]

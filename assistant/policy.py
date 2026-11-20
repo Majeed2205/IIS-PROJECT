@@ -8,7 +8,7 @@ decide() is a pure function. It never changes the calendar and never books
 anything: a BOOK action is carried out by the conversation loop (chat.py),
 which calls BookingDesk.book() and speaks describe(result).
 A language model never decides what happens next; it may only fill in a
-Request (step 4, planned).
+Request (model.py, step 4).
 """
 from __future__ import annotations
 

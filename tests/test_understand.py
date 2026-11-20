@@ -134,7 +134,8 @@ class WordTests(unittest.TestCase):
 
     def test_no(self):
         for text in ["No", "No, I said Thursday", "that's not right", "that's wrong", "That isn't right",
-                     "That isn’t right", "that isnt right", "dont book it yet", "nah"]:
+                     "That isn’t right", "that isnt right", "dont book it yet", "nah",
+                     "I cannot do Monday", "That's incorrect", "none of them", "I havent got time", "we arent free"]:
             heard = hear(text)
             self.assertTrue(heard["no"], text)
             self.assertFalse(heard["yes"], text)
@@ -148,6 +149,14 @@ class WordTests(unittest.TestCase):
                      "The first one doesn't work for me", "Later than 5:30", "I finish work at 2",
                      "the second, not the first"]:
             self.assertTrue(heard_nothing(hear(text)), text)
+
+    def test_after_or_before_must_come_just_before_a_time(self):
+        for text in ["after Monday", "before Friday", "after the 5:30", "after about eleven", "after the morning",
+                     "A haircut after Monday at four", "the second one after the 5:30"]:
+            self.assertTrue(hear(text)["unclear"], text)
+        self.assertEqual(hear("after six")["earliest"], "18:01")
+        self.assertEqual(hear("just after 4")["earliest"], "16:01")
+        self.assertEqual(hear("before five")["latest"], "16:59")
 
     def test_which_part(self):
         self.assertEqual(hear("the day")["parts"], ["day"])

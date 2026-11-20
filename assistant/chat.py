@@ -1,6 +1,7 @@
 """The conversation loop. Keeps track of the call from turn to turn.
 
 Status: implemented. Typed input in the terminal:  python -m assistant.chat clarify
+The terminal uses the model reader (model.py); the tests use the keyword reader.
 """
 from __future__ import annotations
 
@@ -8,6 +9,7 @@ import sys
 from dataclasses import replace
 
 from .booking import BOOKED, BookingDesk, describe
+from .model import ModelReader
 from .policy import ASK_AGAIN, BOOK, CONFIRM, HANDOVER, STRATEGIES, Request, decide
 from .slots import Calendar
 from .understand import understand
@@ -18,9 +20,10 @@ MAX_NOT_UNDERSTOOD = 3  # turns in a row before handing over (simulated, like th
 
 
 class Conversation:
-    def __init__(self, calendar: Calendar, strategy: str, call_id: str = "call-1"):
+    def __init__(self, calendar: Calendar, strategy: str, call_id: str = "call-1", reader=understand):
         if strategy not in STRATEGIES:
             raise ValueError(f"Unknown strategy: {strategy!r}")
+        self.reader = reader  # turns the caller's words into details
         self.calendar = calendar
         self.desk = BookingDesk(calendar)
         self.strategy = strategy
@@ -35,11 +38,11 @@ class Conversation:
 
     def reply(self, text: str) -> str:
         """Take one caller turn and return what the assistant says."""
-        first_turn = self.request == Request()  # the caller has not asked for anything yet
-        heard = understand(text, self.calendar.services, first_turn)
-
         if self.finished:
             return "This call has ended."
+
+        first_turn = self.request == Request()  # the caller has not asked for anything yet
+        heard = self.reader(text, self.calendar.services, first_turn)
 
         # Already booked: saying "yes" or "book it" again must not book twice.
         if self.booking is not None:
@@ -59,11 +62,18 @@ class Conversation:
         if after_read_back:
             if heard["yes"] and agrees(heard, last.slot, self.request.service):
                 return self.book(last.slot.day, last.slot.time)
-            # A plain "no" (rule 6). "No, wrong time" is handled below as a correction.
+            # Rule 6: a "no" that does not say what is wrong ("No", "I can't do Monday").
+            # "No, wrong time" is handled below.
             if heard["no"] and not has_details(heard) and not heard["parts"]:
                 self.last_action = None
                 self.asked_which_part = True
-                self.not_understood = 0
+                if heard["unclear"]:
+                    self.not_understood += 1  # "I can't do Monday" still counts towards the handover (rule 7)
+                else:
+                    self.not_understood = 0
+                if self.not_understood >= MAX_NOT_UNDERSTOOD:
+                    self.finished = True
+                    return GIVE_UP
                 return WHICH_PART
 
         old_request = self.request
@@ -175,8 +185,14 @@ def main() -> None:
         print("Usage: python -m assistant.chat [repeat | clarify | summarise]")
         return
 
-    chat = Conversation(Calendar.load(), strategy)
+    reader = ModelReader()
+    chat = Conversation(Calendar.load(), strategy, reader=reader)
     print(f"Demo Salon booking assistant ({strategy}). Type 'quit' to stop.")
+    if reader.live:
+        print("Understanding: Claude Haiku 5.5 (live). New answers are saved in data/replays.json.")
+    else:
+        print("Understanding: replay mode (no live calls). Saved model answers are used, "
+              "and any other sentence goes to the simple keyword reader (simulated).")
     print("Assistant: Hello, Demo Salon. How can I help?")
     while not chat.finished:
         try:

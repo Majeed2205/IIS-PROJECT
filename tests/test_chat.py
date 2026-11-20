@@ -8,7 +8,7 @@ READ_BACK = "So that's a haircut on Friday at 5:30 pm. Is that right?"
 
 
 class ChatTests(unittest.TestCase):
-    """Test phrases 1 to 16 from docs/dialogue-spec.md, typed into the loop."""
+    """Test phrases 1 to 19 from docs/dialogue-spec.md, typed into the loop."""
 
     def start(self, strategy, calendar=None):
         self.calendar = calendar or Calendar.load()
@@ -254,6 +254,31 @@ class ChatTests(unittest.TestCase):
         self.assertEqual(chat.reply("Friday's fine"), READ_BACK)
         self.assertIsNone(chat.booking)
 
+    def test_17_a_change_of_mind_is_not_understood(self):
+        chat = self.start("clarify")
+        chat.reply("A haircut on Friday after five")
+        self.assertEqual(chat.reply("5:30, no wait, 6:15"),
+                         "Sorry, I didn't catch that. On Friday after 5 pm I have 5:30 pm or 6:15 pm. Which would you like?")
+        self.assertIsNone(chat.booking)
+
+    def test_18_turning_a_read_back_down_asks_which_part(self):
+        chat = self.start("summarise")
+        self.assertEqual(chat.reply("A haircut on Monday at 11"), "So that's a haircut on Monday at 11 am. Is that right?")
+        self.assertEqual(chat.reply("I can't do Monday"), WHICH_PART)
+        self.assertEqual(chat.reply("the day"), "Which day would you like to come in?")
+        self.assertIsNone(chat.booking)
+        for answer in ["5:30, no wait, 6:15", "I cannot do Friday", "That's incorrect"]:  # other "no" words
+            chat = self.start("summarise")
+            chat.reply("A haircut on Friday at half five")
+            self.assertEqual(chat.reply(answer), WHICH_PART, answer)
+            self.assertIsNone(chat.booking, answer)
+
+    def test_19_turning_a_read_back_down_without_a_no_word_is_not_understood(self):
+        chat = self.start("summarise")
+        chat.reply("A haircut on Friday at half five")
+        self.assertEqual(chat.reply("I'm busy at 5:30"), "Sorry, I didn't catch that. " + READ_BACK)
+        self.assertIsNone(chat.booking)
+
     def test_15_three_turns_not_understood_hand_over(self):
         for strategy in ("repeat", "clarify", "summarise"):
             chat = self.start(strategy)
@@ -287,6 +312,56 @@ class ChatTests(unittest.TestCase):
         self.assertEqual(chat.reply("No"), WHICH_PART)
         chat.reply("I'm busy")
         self.assertFalse(chat.finished)
+
+    def test_a_no_that_is_not_understood_still_counts_towards_the_handover(self):
+        chat = self.start("summarise")
+        chat.reply("A haircut on Friday at half five")
+        chat.reply("I'm busy")
+        chat.reply("I'm busy")
+        self.assertEqual(chat.reply("I can't do Friday"), GIVE_UP)
+        self.assertTrue(chat.finished)
+        chat = self.start("summarise")
+        chat.reply("A haircut on Monday at 11")
+        for _ in range(3):
+            reply = chat.reply("I can't do Monday")
+        self.assertEqual(reply, GIVE_UP)  # the call cannot go round in circles
+        self.assertIsNone(chat.booking)
+
+    def test_an_understood_turn_that_changes_nothing_starts_the_count_again(self):
+        chat = self.start("summarise")
+        chat.reply("A haircut on Friday at half five")
+        chat.reply("I'm busy")
+        chat.reply("I'm busy")
+        self.assertEqual(chat.reply("Friday's fine"), READ_BACK)  # understood, but not a yes (rule 9)
+        self.assertEqual(chat.reply("I'm busy"), "Sorry, I didn't catch that. " + READ_BACK)
+        self.assertFalse(chat.finished)
+
+    def test_a_no_that_names_the_part_starts_the_count_again(self):
+        chat = self.start("summarise")
+        chat.reply("A haircut on Friday at half five")
+        chat.reply("I'm busy")
+        chat.reply("I'm busy")
+        self.assertEqual(chat.reply("No, wrong time"), "What time on Friday would you like?")
+        self.assertEqual(chat.reply("I'm busy"), "Sorry, I didn't catch that. What time on Friday would you like?")
+        self.assertFalse(chat.finished)
+
+    def test_a_handover_ends_the_call(self):
+        cases = [("repeat", ["A haircut on Friday after five"] * 3),
+                 ("clarify", ["A haircut on Friday", "I'm busy", "I'm busy", "I'm busy"])]
+        for strategy, turns in cases:
+            chat = self.start(strategy)
+            for turn in turns:
+                chat.reply(turn)
+            self.assertTrue(chat.finished, strategy)
+            self.assertEqual(chat.reply("A haircut on Friday at half five"), "This call has ended.", strategy)
+            self.assertIsNone(chat.booking, strategy)
+
+    def test_a_no_after_a_booking_gets_all_booked(self):
+        for answer in ["No", "not Friday"]:
+            chat = self.start("summarise")
+            chat.reply("A haircut on Friday at half five")
+            chat.reply("Yes")
+            self.assertEqual(chat.reply(answer), "You're all booked. Thank you for calling.", answer)
 
     def test_13_decline_early(self):
         chat = self.start("clarify")
@@ -337,10 +412,28 @@ class SafetyTests(unittest.TestCase):
             self.assertEqual(chat.reply(answer), offer, answer)
             self.assertIsNone(chat.booking, answer)
 
+    def test_a_no_outside_a_read_back_changes_nothing(self):
+        cases = [
+            ([], "No, a haircut on Friday at half five", "Which day would you like to come in?"),
+            (["A haircut on Friday at seven"], "No, 6:15",
+             "I have nothing free on Friday at 7 pm. I can offer Friday at 5:30 pm or 6:15 pm, or you can name another day."),
+            (["Can I come in on Friday after five?"], "No, a haircut",
+             "What would you like to book? We offer haircut, colour or beard trim."),
+            (["A haircut on Friday after five"], "No, the time",
+             "On Friday after 5 pm I have 5:30 pm or 6:15 pm. Which would you like?"),
+        ]
+        for before, answer, question in cases:
+            chat = Conversation(Calendar.load(), "clarify")
+            for turn in before:
+                chat.reply(turn)
+            self.assertEqual(chat.reply(answer), "Sorry, I didn't catch that. " + question, answer)
+            self.assertIsNone(chat.booking, answer)
+
     def test_hesitating_at_a_read_back_books_nothing(self):
         for answer in ["OK, let me check my diary", "Right, I'll call back later", "ok hang on", "5:30, right?",
                        "ok, just a second",
-                       "are you sure", "Yes, but later", "fine, six then", "That isn’t right", "dont book it yet"]:
+                       "are you sure", "Yes, but later", "fine, six then", "That isn’t right", "dont book it yet",
+                       "5:30, no wait, 6:15", "I can't do Friday"]:
             chat = Conversation(Calendar.load(), "summarise")
             chat.reply("A haircut on Friday at half five")
             chat.reply(answer)

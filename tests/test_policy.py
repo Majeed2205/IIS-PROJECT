@@ -21,8 +21,8 @@ class SpecPhraseTests(unittest.TestCase):
     """Test phrases 1 to 8 and 13 from docs/dialogue-spec.md.
 
     Each phrase is written as the Request the understanding step (step 4,
-    planned) should produce for it. Phrases 9 to 12 need the conversation
-    loop (step 3) and are tested there.
+    model.py) should produce for it. Phrases 9 to 12 and 14 to 19 need the
+    conversation loop (step 3) and are tested in test_chat.py.
     """
 
     def setUp(self):
@@ -256,7 +256,7 @@ class RuleTests(unittest.TestCase):
 
 
 class SafetyTests(unittest.TestCase):
-    """Rules from AGENTS.md that must hold for every request and strategy."""
+    """The limits in docs/dialogue-spec.md that must hold for every request and strategy."""
 
     REQUESTS = [
         Request(),
