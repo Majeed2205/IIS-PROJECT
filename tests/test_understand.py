@@ -150,6 +150,23 @@ class WordTests(unittest.TestCase):
                      "the second, not the first"]:
             self.assertTrue(heard_nothing(hear(text)), text)
 
+    def test_a_question_without_a_question_mark(self):
+        for text in ["OK, is that right", "ok is that 5:30", "Yes, is that Friday", "And is that Friday", "6:15, is it",
+                     "Friday at 6:15, is that right", "Right, is that the 6:15", "OK, is 6:15 ok", "Yes, is Friday fine",
+                     "And is 6:15 ok", "It is 6:15, is it", "OK great, is 5:30 right", "Yes thanks, is Friday ok",
+                     "Yes please, is 5:30 ok", "Thanks, is 6:15 ok", "Hello, is Friday ok", "Then is 6:15 ok",
+                     "Thank you, is 6:15 ok", "Lovely, is Friday ok", "Good, is 6:15 ok", "Hi, is Friday ok"]:
+            self.assertTrue(heard_nothing(hear(text)), text)
+            self.assertTrue(hear(text)["unclear"], text)
+        # Statements such as "that is it", "5:30 is fine" or "it sure is", and requests such as "Can I ...".
+        for text in ["Yes, that is it", "yes it is", "6:15 it is", "Yes, 5:30 is fine", "Friday it is", "That is it",
+                     "Yes it is, that's it", "It sure is", "Sure is", "Yes, is correct", "Yes is fine", "Ok is good",
+                     "Yes, is great", "Yes, is lovely", "Can I book a haircut on Friday at 5:30, is that ok"]:
+            self.assertFalse(hear(text)["unclear"], text)
+        # These could be statements, but they look like "6:15, is it", so the assistant asks again.
+        for text in ["6:15 is it for me", "No, Thursday is it"]:
+            self.assertTrue(hear(text)["unclear"], text)
+
     def test_after_or_before_must_come_just_before_a_time(self):
         for text in ["after Monday", "before Friday", "after the 5:30", "after about eleven", "after the morning",
                      "A haircut after Monday at four", "the second one after the 5:30"]:
@@ -162,13 +179,15 @@ class WordTests(unittest.TestCase):
         for text in ["You said Friday?", "That's Friday?", "Friday at 5:30?", "6:15, is it?", "The first one?", "6:15?",
                      "You said Friday? OK", "I said Friday?", "You have the 6:15?", "Is that Friday?",
                      "You said I can come Friday?", "I can have the 6:15?", "Can I? You said Friday?",
-                     "Please, is it Friday?", "OK, is that Friday please?", "Friday please, right?"]:
+                     "Please, is it Friday?", "OK, is that Friday please?", "Friday please, right?",
+                     "Friday, is 6:15 ok please?"]:
             self.assertTrue(heard_nothing(hear(text)), text)
             self.assertTrue(hear(text)["unclear"], text)
         # A "?" can still ask for something.
         for text in ["Can I come in on Sunday?", "Could I have a haircut on Friday?", "May I book a haircut?",
                      "Would you have the 6:15?", "Friday at 5:30 please?",
-                     "Good afternoon, can I book a haircut on Friday?", "Friday, can I?"]:
+                     "Good afternoon, can I book a haircut on Friday?", "Friday, can I?",
+                     "Can I have the 6:15, is that ok?"]:
             self.assertFalse(hear(text)["unclear"], text)
 
     def test_which_part(self):

@@ -533,6 +533,14 @@ class SafetyTests(unittest.TestCase):
             ("clarify", "A haircut on Friday after five", "6:15?"),
             ("clarify", "A haircut on Friday after five", "The first one?"),
             ("repeat", "A haircut on Friday after five", "6:15, is it?"),
+            # No "?", but still a question (rule 7).
+            ("summarise", "A haircut on Friday at half five", "OK, is that right"),
+            ("summarise", "A haircut on Friday at half five", "Yes, is that Friday"),
+            ("summarise", "A haircut on Friday at half five", "OK great, is 5:30 right"),
+            ("clarify", "A haircut on Thursday after six", "And is that Friday"),
+            ("clarify", "A haircut on Friday after five", "Right, is that the 6:15"),
+            ("clarify", "Colour on Saturday afternoon", "Yes thanks, is Friday ok"),
+            ("repeat", "A haircut on Friday after five", "6:15, is it"),
         ]
         for strategy, first, question in cases:
             chat = Conversation(Calendar.load(), strategy)
@@ -540,6 +548,12 @@ class SafetyTests(unittest.TestCase):
             again = said if strategy == "repeat" else "Sorry, I didn't catch that. " + said
             self.assertEqual(chat.reply(question), again, question)
             self.assertIsNone(chat.booking, question)
+
+    def test_a_no_word_question_at_a_read_back_asks_which_part(self):
+        chat = Conversation(Calendar.load(), "summarise")
+        chat.reply("A haircut on Friday at half five")
+        self.assertEqual(chat.reply("No, is it 6:15"), WHICH_PART)  # rule 6
+        self.assertIsNone(chat.booking)
 
     def test_a_request_with_a_question_mark_still_books(self):
         chat = Conversation(Calendar.load(), "clarify")

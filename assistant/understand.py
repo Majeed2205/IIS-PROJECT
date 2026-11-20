@@ -34,6 +34,8 @@ QUESTION_WORDS = ["what", "which", "when", "where", "how", "why"]
 # A "?" makes a question too ("You said Friday?"), unless the turn asks for something:
 # "Can I come in on Sunday?", "Would you have the 6:15?" or "Friday at 5:30 please?".
 REQUEST_WORDS = ["can", "could", "may", "would"]
+# Words that can come just before the "is" of a question with no "?" ("Thanks, is 6:15 ok").
+OPENERS = ["and", "then", "please", "thanks", "you", "great", "lovely", "good", "hello", "hi"]
 
 # Words that can go with a yes, as in "yes please, that's great".
 YES_FILLER = ["please", "that", "it", "is", "a", "an", "the", "on", "for", "then", "great", "lovely",
@@ -73,6 +75,8 @@ def understand(text: str, services: list[str], first_turn: bool = False) -> dict
 
     is_question = (len(words) > 0 and words[0] in QUESTION_STARTS) or any(w in QUESTION_WORDS for w in words)
     if "?" in text and not asks_for_something(words):
+        is_question = True
+    if asks_with_is(words):
         is_question = True
     # We only act on a turn if we know every word in it. A "no" or "not" in the
     # middle is not a known word, because we can't tell what is being turned down.
@@ -271,6 +275,25 @@ def only_yes_words(words: list[str], heard: dict, service_words: list[str]) -> b
             continue
         return False
     return True
+
+
+def asks_with_is(words: list[str]) -> bool:
+    """True for "OK, is that right", "Thanks, is 6:15 ok" or "6:15, is it", even with no "?".
+
+    The "is" comes just after a yes word or an opener, or just before "that" or "it".
+    "That is it", "5:30 is fine", "it sure is" and "yes, is fine" are statements, and
+    "Can I have the 6:15, is that ok?" is a request (v0.8).
+    """
+    if asks_for_something(words):
+        return False
+    for i, word in enumerate(words):
+        before = words[i - 1] if i > 0 else ""
+        after = words[i + 1] if i + 1 < len(words) else ""
+        if word != "is" or after == "" or after in YES_WORDS or after in ("good", "great", "lovely"):
+            continue
+        if before in YES_WORDS or before in OPENERS or (after in ("that", "it") and before not in ("that", "it")):
+            return True
+    return False
 
 
 def asks_for_something(words: list[str]) -> bool:

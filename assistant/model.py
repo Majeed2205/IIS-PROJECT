@@ -23,7 +23,7 @@ from pathlib import Path
 
 from .policy import DAY_PARTS
 from .slots import DAYS
-from .understand import CHOICES, MINUTES, TIME_WORDS, YES_WORDS, read_number, understand, unclear
+from .understand import CHOICES, MINUTES, TIME_WORDS, YES_WORDS, asks_with_is, read_number, understand, unclear
 
 MODEL = "claude-haiku-5-5"
 ROOT = Path(__file__).resolve().parent.parent
@@ -118,6 +118,7 @@ def to_heard(answer: dict, text: str, services: list[str]) -> dict:
     A turn that is not understood is checked for a "no" word ("I can't do Monday") and a part
     the same way as in the keyword reader, so both readers give the same reply (rule 6).
     If the model is unsure about a turn that is only a time ("10"), the keyword reader reads it.
+    A turn that asks with "is" ("OK, is that right") is not understood, whatever the model read.
     """
     words_heard = understand(text, services, first_turn=True)  # "Morning!" at the start is a greeting
     not_understood = unclear(dict(words_heard))
@@ -132,6 +133,9 @@ def to_heard(answer: dict, text: str, services: list[str]) -> dict:
         return words_heard  # the model reads "10" on its own and can be unsure; the keyword reader is not
     if answer["unclear"] or (answer["yes"] and answer["no"]):  # "yeah no" is not clear either
         return not_understood
+    words = [word.strip("?,.!'\"") for word in text.lower().split()]
+    if asks_with_is(words):
+        return not_understood  # a question (rule 7), even if the model read a yes or a request
 
     service = answer.get("service")
     day = answer.get("day")
@@ -184,8 +188,7 @@ def to_heard(answer: dict, text: str, services: list[str]) -> dict:
     # Rule 9: "Friday's fine" agrees with one detail only. A full yes with details starts with yes.
     heard["yes"] = answer["yes"]
     details = heard["service"] or heard["day"] or heard["time"] or heard["earliest"] or heard["latest"]
-    words = text.lower().split()
-    first_word = words[0].strip("?,.!'\"") if words else ""
+    first_word = words[0] if words else ""
     if details and first_word not in YES_WORDS:
         heard["yes"] = False
     return heard
