@@ -8,7 +8,7 @@ READ_BACK = "So that's a haircut on Friday at 5:30 pm. Is that right?"
 
 
 class ChatTests(unittest.TestCase):
-    """Test phrases 1 to 19 from docs/dialogue-spec.md, typed into the loop."""
+    """Test phrases 1 to 20 from docs/dialogue-spec.md, typed into the loop."""
 
     def start(self, strategy, calendar=None):
         self.calendar = calendar or Calendar.load()
@@ -272,6 +272,119 @@ class ChatTests(unittest.TestCase):
             chat.reply("A haircut on Friday at half five")
             self.assertEqual(chat.reply(answer), WHICH_PART, answer)
             self.assertIsNone(chat.booking, answer)
+
+    def test_20_taking_an_offered_day_after_a_decline_asks_for_the_time(self):
+        for strategy in ("repeat", "clarify", "summarise"):
+            chat = self.start(strategy)
+            self.assertEqual(chat.reply("A haircut on Tuesday at 6"), "I have nothing free on Tuesday at 6 pm. "
+                             "I can offer Thursday at 10 am or 2 pm, or you can name another day.", strategy)
+            self.assertEqual(chat.reply("Thursday"), "What time on Thursday would you like?", strategy)
+            self.assertIsNone(chat.booking, strategy)
+        chat = self.start("summarise")
+        chat.reply("A haircut on Friday at half five")
+        chat.reply("No, I said Thursday")  # test phrase 9: declined, Thursday at 10 am or 2 pm offered
+        self.assertEqual(chat.reply("Thursday"), "What time on Thursday would you like?")
+
+    def test_after_a_decline_a_time_that_is_free_on_the_offered_day_is_kept(self):
+        chat = self.start("clarify")
+        chat.reply("Colour on Saturday at 4 pm")  # declined: Monday at 11 am or 4 pm is offered
+        self.assertEqual(chat.reply("Monday"), "Booked: colour on Monday at 4 pm.")
+
+    def test_after_a_decline_a_day_that_was_not_offered_keeps_the_time(self):
+        chat = self.start("clarify")
+        chat.reply("A haircut on Tuesday at 6")  # declined: Thursday is offered
+        self.assertEqual(chat.reply("Friday"), "I have nothing free on Friday at 6 pm. "
+                         "I can offer Friday at 5:30 pm or 6:15 pm, or you can name another day.")
+
+    def test_after_a_decline_a_time_said_with_an_offered_day_is_kept(self):
+        for answer, when in [("Thursday at 6", "Thursday at 6 pm"), ("Thursday evening", "Thursday evening")]:
+            chat = self.start("clarify")
+            chat.reply("A haircut on Tuesday at 6")  # declined: Thursday at 10 am or 2 pm is offered
+            self.assertEqual(chat.reply(answer), f"I have nothing free on {when}. "
+                             "I can offer Thursday at 10 am or 2 pm, or you can name another day.", answer)
+
+    def test_after_a_decline_an_old_time_or_range_that_is_not_free_is_forgotten(self):
+        for first in ["A haircut on Tuesday at 12", "A haircut on Thursday evening"]:  # 12 pm is between 10 am and 2 pm
+            chat = self.start("clarify")
+            chat.reply(first)  # declined: Thursday at 10 am or 2 pm is offered
+            self.assertEqual(chat.reply("Thursday"), "What time on Thursday would you like?", first)
+
+    def test_after_a_decline_a_range_that_is_free_on_the_offered_day_is_kept(self):
+        chat = self.start("clarify")
+        chat.reply("Colour on Saturday afternoon")  # test phrase 5: Monday at 11 am or 4 pm is offered
+        self.assertEqual(chat.reply("Monday"), "Booked: colour on Monday at 4 pm.")
+
+    def test_after_test_phrase_20_an_offered_slot_can_still_be_picked(self):
+        expected = {"repeat": "Booked: haircut on Thursday at 10 am.", "clarify": "Booked: haircut on Thursday at 10 am.",
+                    "summarise": "So that's a haircut on Thursday at 10 am. Is that right?"}
+        for strategy, said in expected.items():
+            chat = self.start(strategy)
+            chat.reply("A haircut on Tuesday at 6")
+            chat.reply("Thursday")  # "What time on Thursday would you like?"
+            self.assertEqual(chat.reply("the first one"), said, strategy)
+
+    def test_an_offered_slot_can_still_be_picked_after_the_service_question(self):
+        chat = self.start("clarify")  # the terminal chat that found this
+        for said in ["at 6", "tuesday", "thursday"]:  # Tuesday at 6 pm is declined; Thursday at 10 am or 2 pm offered
+            chat.reply(said)
+        self.assertEqual(chat.reply("beard trim"), "What time on Thursday would you like?")
+        self.assertEqual(chat.reply("the first one"), "Booked: beard trim on Thursday at 10 am.")
+
+    def test_an_offered_slot_can_still_be_picked_after_a_turn_that_is_not_understood(self):
+        chat = self.start("clarify")
+        chat.reply("A haircut on Tuesday at 6")
+        chat.reply("Thursday")
+        self.assertEqual(chat.reply("hmm"), "Sorry, I didn't catch that. What time on Thursday would you like?")
+        self.assertEqual(chat.reply("the first one"), "Booked: haircut on Thursday at 10 am.")
+
+    def test_slots_offered_for_another_day_cannot_be_picked(self):
+        chat = self.start("clarify")
+        chat.reply("A haircut on Sunday")  # declined: Monday at 11 am or 4 pm is offered
+        self.assertEqual(chat.reply("Friday"), "What time on Friday would you like?")
+        self.assertEqual(chat.reply("the first one"), "What time on Friday would you like?")  # not Monday at 11 am
+        self.assertIsNone(chat.booking)
+
+    def test_the_first_one_after_the_service_question_is_not_a_pick(self):
+        chat = self.start("clarify")
+        chat.reply("Can I come in on Tuesday at 6?")  # declined: Thursday at 10 am or 2 pm is offered
+        chat.reply("Thursday at 2 pm")  # "What would you like to book? We offer haircut, colour or beard trim."
+        chat.reply("the first one")
+        self.assertEqual(chat.reply("a haircut please"), "Booked: haircut on Thursday at 2 pm.")
+
+    def test_a_yes_that_names_another_day_does_not_take_a_single_offer(self):
+        calendar = Calendar(["haircut"], [Slot("thursday", "10:00"), Slot("friday", "17:30")])
+        chat = self.start("clarify", calendar)
+        self.assertEqual(chat.reply("A haircut on Tuesday at 6"), "I have nothing free on Tuesday at 6 pm. "
+                         "I can offer Thursday at 10 am, or you can name another day.")
+        self.assertEqual(chat.reply("Yes, Friday"), "I have nothing free on Friday at 6 pm. "
+                         "I can offer Friday at 5:30 pm, or you can name another day.")
+        self.assertIsNone(chat.booking)  # rule 8: a pick that names a different day does not count
+
+    def test_a_yes_that_names_the_offered_day_takes_a_single_offer(self):
+        for said, booked in [("Yes, Thursday", ("thursday", "10:00")), ("Yes, Tuesday", None)]:
+            calendar = Calendar(["haircut"], [Slot("thursday", "10:00"), Slot("friday", "17:30")])
+            chat = self.start("clarify", calendar)
+            chat.reply("A haircut on Tuesday at 6")  # declined: Thursday at 10 am is offered
+            chat.reply(said)
+            self.assertEqual(chat.booking and (chat.booking.day, chat.booking.time), booked, said)
+
+    def test_a_yes_with_a_time_does_not_take_a_single_offer(self):
+        for turns in [["A haircut on Tuesday at 6", "yes, after six"], ["A haircut on Tuesday at 6", "Thursday", "Sure, at 3"],
+                      ["A haircut on Wednesday", "Thursday", "OK, 6 pm"]]:
+            calendar = Calendar(["haircut"], [Slot("thursday", "10:00"), Slot("friday", "17:30")])
+            chat = self.start("clarify", calendar)
+            for said in turns:
+                reply = chat.reply(said)
+            self.assertIsNone(chat.booking, turns)  # rule 8: the time decides, and 10 am is not after six, at 3 or at 6
+            self.assertTrue(reply.startswith("I have nothing free"), reply)
+
+    def test_offered_slots_can_still_be_picked_after_a_service_decline(self):
+        chat = self.start("clarify")
+        chat.reply("A haircut on Tuesday at 6")  # declined: Thursday at 10 am or 2 pm is offered
+        chat.reply("Thursday")
+        self.assertEqual(chat.reply("a massage"), "Sorry, we don't offer massage. We offer haircut, colour or beard trim.")
+        chat.reply("a haircut")  # "What time on Thursday would you like?"
+        self.assertEqual(chat.reply("the first one"), "Booked: haircut on Thursday at 10 am.")
 
     def test_19_turning_a_read_back_down_without_a_no_word_is_not_understood(self):
         chat = self.start("summarise")

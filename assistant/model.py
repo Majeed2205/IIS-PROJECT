@@ -7,7 +7,8 @@ Without a key it runs in replay mode: it uses answers the model gave before,
 saved in data/replays.json. A sentence with no saved answer, or a live call
 that fails, goes to the simple keyword reader in understand.py (simulated).
 The keyword reader also fills in a detail the model left out, when it knows
-every word of the turn (see to_heard).
+every word of the turn, and reads a turn that is only a time ("10") when the
+model is unsure (see to_heard).
 
 The model only fills in what the caller said. It never decides what the
 assistant does next: that is decide() in policy.py.
@@ -22,7 +23,7 @@ from pathlib import Path
 
 from .policy import DAY_PARTS
 from .slots import DAYS
-from .understand import CHOICES, YES_WORDS, understand, unclear
+from .understand import CHOICES, MINUTES, TIME_WORDS, YES_WORDS, read_number, understand, unclear
 
 MODEL = "claude-haiku-5-5"
 ROOT = Path(__file__).resolve().parent.parent
@@ -116,6 +117,7 @@ def to_heard(answer: dict, text: str, services: list[str]) -> dict:
     The answer is checked like any other input: anything odd means "not understood".
     A turn that is not understood is checked for a "no" word ("I can't do Monday") and a part
     the same way as in the keyword reader, so both readers give the same reply (rule 6).
+    If the model is unsure about a turn that is only a time ("10"), the keyword reader reads it.
     """
     words_heard = understand(text, services, first_turn=True)  # "Morning!" at the start is a greeting
     not_understood = unclear(dict(words_heard))
@@ -126,6 +128,8 @@ def to_heard(answer: dict, text: str, services: list[str]) -> dict:
         return not_understood
     heard["no"] = answer["no"]
     heard["parts"] = [part for part in change if part in ("service", "day", "time")]
+    if answer["unclear"] and is_only_a_time(text, words_heard):
+        return words_heard  # the model reads "10" on its own and can be unsure; the keyword reader is not
     if answer["unclear"] or (answer["yes"] and answer["no"]):  # "yeah no" is not clear either
         return not_understood
 
@@ -185,6 +189,18 @@ def to_heard(answer: dict, text: str, services: list[str]) -> dict:
     if details and first_word not in YES_WORDS:
         heard["yes"] = False
     return heard
+
+
+def is_only_a_time(text: str, words_heard: dict) -> bool:
+    """True for a turn that is only a time, such as "10", "at 11 please" or "half five"."""
+    time_words = TIME_WORDS + ["quarter", "am", "pm", "o'clock", "please", "then"]
+    for word in text.lower().split():
+        word = word.strip("?,.!'\"")
+        if word.startswith("0"):
+            return False  # "0" or "05:30": the keyword reader would read it as an afternoon time
+        if word not in time_words and word not in MINUTES and not word.isdigit() and read_number(word) is None:
+            return False  # "You said 6:15" or "Monday 11" is more than a time
+    return bool(words_heard["time"] or words_heard["earliest"] or words_heard["latest"])
 
 
 def build_request(text: str, services: list[str]) -> dict:

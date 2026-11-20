@@ -21,7 +21,7 @@ class SpecPhraseTests(unittest.TestCase):
     """Test phrases 1 to 8 and 13 from docs/dialogue-spec.md.
 
     Each phrase is written as the Request the understanding step (step 4,
-    model.py) should produce for it. Phrases 9 to 12 and 14 to 19 need the
+    model.py) should produce for it. Phrases 9 to 12 and 14 to 20 need the
     conversation loop (step 3) and are tested in test_chat.py.
     """
 

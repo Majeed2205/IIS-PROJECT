@@ -1,4 +1,16 @@
 {
+  "10": {
+    "change": [],
+    "choice": "",
+    "clock": "",
+    "day": "",
+    "no": false,
+    "part_of_day": "",
+    "service": "",
+    "time_kind": "",
+    "unclear": true,
+    "yes": false
+  },
   "4 pm": {
     "change": [],
     "choice": "",
@@ -83,6 +95,18 @@
     "unclear": false,
     "yes": false
   },
+  "a haircut on tuesday at 6": {
+    "change": [],
+    "choice": "",
+    "clock": "18:00",
+    "day": "tuesday",
+    "no": false,
+    "part_of_day": "",
+    "service": "haircut",
+    "time_kind": "at",
+    "unclear": false,
+    "yes": false
+  },
   "a haircut please": {
     "change": [],
     "choice": "",
@@ -154,6 +178,18 @@
     "time_kind": "",
     "unclear": false,
     "yes": true
+  },
+  "bread trim": {
+    "change": [],
+    "choice": "",
+    "clock": "",
+    "day": "",
+    "no": false,
+    "part_of_day": "",
+    "service": "bread trim",
+    "time_kind": "",
+    "unclear": true,
+    "yes": false
   },
   "can i come in on friday after five?": {
     "change": [],
@@ -454,6 +490,18 @@
     "choice": "",
     "clock": "",
     "day": "",
+    "no": false,
+    "part_of_day": "",
+    "service": "",
+    "time_kind": "",
+    "unclear": false,
+    "yes": false
+  },
+  "thursday": {
+    "change": [],
+    "choice": "",
+    "clock": "",
+    "day": "thursday",
     "no": false,
     "part_of_day": "",
     "service": "",

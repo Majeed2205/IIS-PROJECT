@@ -10,7 +10,7 @@ from dataclasses import replace
 
 from .booking import BOOKED, BookingDesk, describe
 from .model import ModelReader
-from .policy import ASK_AGAIN, BOOK, CONFIRM, HANDOVER, STRATEGIES, Request, decide
+from .policy import ASK_AGAIN, BOOK, CONFIRM, DECLINE, HANDOVER, STRATEGIES, Request, decide
 from .slots import Calendar
 from .understand import understand
 
@@ -35,6 +35,7 @@ class Conversation:
         self.not_understood = 0  # turns in a row we could not understand
         self.booking = None    # the BookingResult once the caller is booked
         self.finished = False  # True after a handover
+        self.offered = ()      # the slots the last decline offered
 
     def reply(self, text: str) -> str:
         """Take one caller turn and return what the assistant says."""
@@ -81,6 +82,12 @@ class Conversation:
         self.asked_which_part = False
 
         action = decide(self.request, self.strategy, self.calendar, self.repeats_asked)
+        # Rule 8: the slots a decline offered can still be picked when we ask for the time that day,
+        # even after another question ("What would you like to book?") in between.
+        if action.kind == DECLINE and action.options:  # "we don't offer massage" keeps the slots
+            self.offered = action.options
+        if action.detail == "time" and self.offered and all(slot.day == self.request.day for slot in self.offered):
+            action = replace(action, options=self.offered)
         self.last_action = action
         if action.kind == BOOK:
             return self.book(action.slot.day, action.slot.time)
@@ -103,7 +110,7 @@ class Conversation:
         return action.say
 
     def update_request(self, heard: dict) -> None:
-        """Change only the details the caller just gave (rule 5)."""
+        """Change only the details the caller just gave (rule 5), and forget details when rule 4 or 6 says so."""
         request = self.request
         has_time = heard["time"] or heard["earliest"] or heard["latest"]
 
@@ -121,6 +128,17 @@ class Conversation:
             if "day" in heard["parts"] and not heard["day"]:
                 request = replace(request, day=None)
             if "time" in heard["parts"] and not has_time:
+                request = replace(request, time=None, earliest=None, latest=None)
+
+        # Rule 4: after a decline, naming the offered day without a time ("Thursday") forgets a time
+        # that is not free that day, so rule 1 asks for what is missing instead of declining again.
+        offered_days = []
+        if self.last_action is not None and self.last_action.kind == DECLINE:
+            offered_days = [slot.day for slot in self.last_action.options]
+        if heard["day"] in offered_days and not has_time:
+            earliest = request.time or request.earliest
+            latest = request.time or request.latest
+            if not self.calendar.find_free(heard["day"], earliest, latest):
                 request = replace(request, time=None, earliest=None, latest=None)
 
         # Picking one of the slots we just offered, e.g. "6:15", "the second one" or "4 pm".
@@ -145,7 +163,7 @@ class Conversation:
             matches = [s for s in options if s.time == heard["time"] and heard["day"] in (None, s.day)]
             if len(matches) == 1:
                 return matches[0]
-        if heard["yes"] and len(options) == 1:
+        if heard["yes"] and not has_time and len(options) == 1 and heard["day"] in (None, options[0].day):
             return options[0]
         return None
 

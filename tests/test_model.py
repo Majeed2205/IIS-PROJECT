@@ -185,6 +185,21 @@ class ToHeardTests(unittest.TestCase):
                                   SERVICES)["parts"], [])
         self.assertEqual(to_heard(answer(no=True), "No, the time is fine", SERVICES)["parts"], [])
 
+    def test_a_turn_that_is_only_a_time_is_read_by_the_keyword_reader(self):
+        # The model reads each turn on its own, and in a real recording it was unsure about a bare "10".
+        for text, time in [("10", "10:00"), ("10 please", "10:00"), ("at 11", "11:00"), ("half five", "17:30"),
+                           ("quarter past six", "18:15"), ("10 30", "10:30"), ("10 am", "10:00"), ("10 o'clock", "10:00"),
+                           ("At 11", "11:00"), ("10, please", "10:00"), ("ten thirty", "10:30"), ("6:15 then", "18:15")]:
+            heard = to_heard(answer(unclear=True), text, SERVICES)
+            self.assertEqual((heard["time"], heard["unclear"]), (time, False), text)
+        self.assertEqual(to_heard(answer(unclear=True), "after six", SERVICES)["earliest"], "18:01")
+        for text in ["You said 6:15", "Monday 11", "10 people", "is it 10", "please"]:  # not only a time
+            self.assertTrue(to_heard(answer(unclear=True), text, SERVICES)["unclear"], text)
+        for text in ["at 10 on Monday", "10 am for a haircut"]:  # a time and more
+            self.assertTrue(to_heard(answer(unclear=True), text, SERVICES)["unclear"], text)
+        for text in ["0", "00:00", "05:30"]:  # the keyword reader would make these afternoon times
+            self.assertTrue(to_heard(answer(unclear=True), text, SERVICES)["unclear"], text)
+
     def test_the_fill_comes_before_the_rule_9_check(self):
         heard = to_heard(answer(yes=True), "Friday's fine", SERVICES)
         self.assertEqual((heard["day"], heard["yes"]), ("friday", False))  # agrees with one detail only
@@ -531,6 +546,20 @@ class ChatWithModelTests(unittest.TestCase):
         self.assertEqual(chat.reply("The time's fine"), "So that's a haircut on Friday at 5:30 pm. Is that right?")
         self.assertIsNone(chat.booking)  # rule 9: it agrees with one part only
 
+    def test_a_mistyped_service_gets_the_list_of_services(self):
+        # The model marks "bread trim" unclear (rule 7); if a reader did report it, rule 4 declines it.
+        services = "We offer haircut, colour or beard trim."
+        for said, reply in [(answer(unclear=True), "Sorry, I didn't catch that. What would you like to book? " + services),
+                            (answer(service="bread trim"), "Sorry, we don't offer bread trim. " + services)]:
+            chat = self.chat("clarify", {"bread trim": said})
+            chat.reply("Can I come in on Thursday at 10?")  # "What would you like to book? ..."
+            self.assertEqual(chat.reply("bread trim"), reply)
+
+    def test_an_hour_on_its_own_picks_an_offered_slot(self):
+        chat = self.chat("clarify", {"10": answer(unclear=True)})  # what the model really said
+        chat.reply("A haircut on Tuesday at 6")  # declined: Thursday at 10 am or 2 pm is offered
+        self.assertEqual(chat.reply("10"), "Booked: haircut on Thursday at 10 am.")
+
 
 class RecordTests(unittest.TestCase):
     def test_only_saved_answers_are_reported_as_saved(self):
@@ -563,6 +592,7 @@ class RecordTests(unittest.TestCase):
         said = answer(unclear=True)
         self.assertEqual(record.filled_in(said, to_heard(said, "I can't do Monday", SERVICES)), [])
         self.assertEqual(record.filled_in(said, to_heard(said, "the time", SERVICES)), [])  # not a fill (rule 6 parts)
+        self.assertEqual(record.filled_in(said, to_heard(said, "10", SERVICES)), [])  # unsure, not a detail left out
         said = answer(service="colour", day="saturday", part_of_day="afternoon")
         self.assertEqual(record.filled_in(said, to_heard(said, "Colour on Saturday afternoon", SERVICES)), [])
         said = answer(service="haircut", day="friday", part_of_day="afternoon")
@@ -571,7 +601,7 @@ class RecordTests(unittest.TestCase):
     def test_the_report_counts_the_answers_the_keyword_reader_filled_in(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
-        answers = {"Yes": answer(yes=True), "the first one after six": answer(choice="first")}
+        answers = {"Yes": answer(yes=True), "the first one after six": answer(choice="first"), "10": answer(unclear=True)}
         reader = ModelReader(live=True, replay_path=Path(folder.name) / "replays.json",
                              ask=lambda text, services: answers[text])
         printed = io.StringIO()
@@ -581,6 +611,8 @@ class RecordTests(unittest.TestCase):
         self.assertIn("'the first one after six'", printed.getvalue())
         self.assertEqual(printed.getvalue().count("<- the keyword reader filled in: time"), 1)
         self.assertIn("filled in a detail the model left out in 1 of them", printed.getvalue())
+        self.assertEqual(printed.getvalue().count("<- the model was unsure; the keyword reader read it"), 1)
+        self.assertIn("The model was unsure about 1 that were only a time", printed.getvalue())
 
     def test_every_recorded_phrase_has_a_reading_to_check(self):
         listed = {" ".join(phrase.lower().split()) for phrase in record.PHRASES}
@@ -659,6 +691,12 @@ SPEC_READINGS = {
     "after 6:15": {"earliest": "18:16"},
     "thursday morning": {"day": "thursday", "earliest": "00:00", "latest": "11:59"},
     "in the evening": {"earliest": "17:00", "latest": "23:59"},
+    # From a chat in the terminal
+    "bread trim": {"unclear": True},  # not understood (rule 7); the service question lists the services
+    "10": {"time": "10:00"},
+    # Test phrase 20 and the request before it
+    "a haircut on tuesday at 6": {"service": "haircut", "day": "tuesday", "time": "18:00"},
+    "thursday": {"day": "thursday"},
 }
 
 
