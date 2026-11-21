@@ -12,7 +12,7 @@
 | Understanding step: Claude Haiku 5.5 turns the caller's words into details | `assistant/model.py` | Implemented (step 4). Live calls need an API key; without one it replays saved answers. If the model leaves out a detail of a turn the keyword reader fully understands, the keyword reader fills it in, and it reads a turn that is only a time ("10") when the model is unsure. A "?" turn that does not ask for something ("You said Friday?"), or a question like "OK, is that right", is not understood, whatever the model read (rule 7) |
 | Saved model answers for replay mode | `data/replays.json`, made by `assistant/record.py` | Implemented; the file appears once the answers are recorded with a key |
 | Keyword reader for typed input | `assistant/understand.py` | Simulated: used for a sentence with no saved answer when there is no key, or when a live call fails (a [model] message is printed). Also fills in a detail the model left out (see above) |
-| Planted-error switch | | Planned (step 5) |
+| Planted-error switch: mishears one time on purpose, to show which strategy catches it | `assistant/mishear.py`, `assistant/chat.py` | Simulated (step 5): off unless `--mishear` is given. One exact time per call is heard as the nearest other free time that day ("half five" on Friday as 6:15 pm); the spec says when it waits |
 | Turn logging | | Planned (step 6) |
 | Voice in the browser, standing in for a phone line | | Planned (step 7), simulated |
 
@@ -22,6 +22,7 @@
 python -m unittest -v
 python -m assistant.demo
 python -m assistant.chat clarify      # or repeat / summarise
+python -m assistant.chat summarise --mishear   # with the planted-error switch on
 ```
 
 The tests and the chat need no key and nothing installed: without a key the

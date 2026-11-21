@@ -2,6 +2,7 @@
 
 Status: implemented. Typed input in the terminal:  python -m assistant.chat clarify
 The terminal uses the model reader (model.py); the tests use the keyword reader.
+With --mishear the planted-error switch (mishear.py, simulated) mishears one time.
 """
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import sys
 from dataclasses import replace
 
 from .booking import BOOKED, BookingDesk, describe
+from .mishear import misheard_time
 from .model import ModelReader
 from .policy import ASK_AGAIN, BOOK, CONFIRM, DECLINE, HANDOVER, STRATEGIES, Request, decide
 from .slots import Calendar
@@ -20,10 +22,13 @@ MAX_NOT_UNDERSTOOD = 3  # turns in a row before handing over (simulated, like th
 
 
 class Conversation:
-    def __init__(self, calendar: Calendar, strategy: str, call_id: str = "call-1", reader=understand):
+    def __init__(self, calendar: Calendar, strategy: str, call_id: str = "call-1", reader=understand,
+                 mishear: bool = False):
         if strategy not in STRATEGIES:
             raise ValueError(f"Unknown strategy: {strategy!r}")
         self.reader = reader  # turns the caller's words into details
+        self.mishear = mishear  # the planted-error switch (step 5, simulated)
+        self.misheard = None    # (said, heard) once a time has been misheard
         self.calendar = calendar
         self.desk = BookingDesk(calendar)
         self.strategy = strategy
@@ -58,6 +63,11 @@ class Conversation:
         if heard["no"] and not after_read_back and not self.asked_which_part:
             heard = understand("", self.calendar.services)
             heard["unclear"] = True
+
+        # Step 5 (simulated): after the line above, so a turn that is thrown away does not use it up,
+        # and not in an answer to a read-back, so summarise never books a time it has not read back.
+        if self.mishear and self.misheard is None and heard["time"] and not after_read_back:
+            heard = self.plant_error(heard)
 
         # Answer to a read-back (summarise).
         if after_read_back:
@@ -167,6 +177,15 @@ class Conversation:
             return options[0]
         return None
 
+    def plant_error(self, heard: dict) -> dict:
+        """Hear the time as the nearest other free time that day (only once per call)."""
+        day = heard["day"] or self.request.day
+        wrong = misheard_time(heard["time"], day, self.calendar)
+        if wrong is None:
+            return heard  # no day yet, or nothing else free that day: wait for the next time
+        self.misheard = (heard["time"], wrong)
+        return dict(heard, time=wrong)
+
     def book(self, day: str, time: str) -> str:
         """Book through the booking desk and say what really happened."""
         # Same call and same slot gives the same id, so a repeat is never booked twice.
@@ -197,15 +216,23 @@ def agrees(heard: dict, slot, service: str) -> bool:
     return heard["choice"] is None and not heard["parts"]
 
 
+def read_args(args: list[str]) -> tuple[str, bool]:
+    """The strategy (clarify if none is given) and whether --mishear was given."""
+    words = [arg for arg in args if arg != "--mishear"]
+    return (words[0] if words else "clarify"), "--mishear" in args
+
+
 def main() -> None:
-    strategy = sys.argv[1] if len(sys.argv) > 1 else "clarify"
+    strategy, mishear = read_args(sys.argv[1:])
     if strategy not in STRATEGIES:
-        print("Usage: python -m assistant.chat [repeat | clarify | summarise]")
+        print("Usage: python -m assistant.chat [repeat | clarify | summarise] [--mishear]")
         return
 
     reader = ModelReader()
-    chat = Conversation(Calendar.load(), strategy, reader=reader)
+    chat = Conversation(Calendar.load(), strategy, reader=reader, mishear=mishear)
     print(f"Demo Salon booking assistant ({strategy}). Type 'quit' to stop.")
+    if mishear:
+        print("Planted-error switch: on. One time you say will be misheard (simulated).")
     if reader.live:
         print("Understanding: Claude Haiku 5.5 (live). New answers are saved in data/replays.json.")
     else:

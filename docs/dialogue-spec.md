@@ -1,6 +1,6 @@
 # Dialogue specification
 
-Draft v0.8. The first version was written before any dialogue code, so the rules could be reviewed and changed first. v0.2 settled six gaps found while planning the repair policy, v0.3 added one rule found while building it ("decline early"), v0.4 added rule 7 for turns the assistant does not understand, found while building the conversation loop, v0.5 made "after X" leave X out, v0.6 added a handover when the assistant keeps not understanding and wrote down rules 8 to 10, which the conversation loop already followed, v0.7 said how rules 6 and 7 treat a change of mind or a turn-down, found while checking the model's answers, and v0.8 said what happens when the caller takes the offered day after a decline and how a mistyped service is handled, both found while trying the assistant in the terminal, added "You said Friday?" to rule 7's questions, and let the keyword reader read a turn that is only a time when the model is unsure. Each decision and its source is listed under "Decisions" below.
+Draft v0.9. The first version was written before any dialogue code, so the rules could be reviewed and changed first. v0.2 settled six gaps found while planning the repair policy, v0.3 added one rule found while building it ("decline early"), v0.4 added rule 7 for turns the assistant does not understand, found while building the conversation loop, v0.5 made "after X" leave X out, v0.6 added a handover when the assistant keeps not understanding and wrote down rules 8 to 10, which the conversation loop already followed, v0.7 said how rules 6 and 7 treat a change of mind or a turn-down, found while checking the model's answers, and v0.8 said what happens when the caller takes the offered day after a decline and how a mistyped service is handled, both found while trying the assistant in the terminal, added "You said Friday?" to rule 7's questions, and let the keyword reader read a turn that is only a time when the model is unsure. v0.9 specified the planted-error switch for step 5. Each decision and its source is listed under "Decisions" below.
 
 ## What a booking needs
 
@@ -59,6 +59,10 @@ These are the three approaches compared in the Assignment 1 literature review.
 | Correct | Caller changes one detail ("No, I said Thursday") | The changed request is checked again, so the reply can be a question, an offer, a read-back, a booking or a decline, for example: "I have nothing free on Thursday at 5:30 pm. I can offer Thursday at 10 am or 2 pm, or you can name another day." |
 | Decline | Nothing free, or outside what the salon offers | "I have nothing free on Saturday afternoon. I can offer Monday at 11 am or 4 pm, or you can name another day." |
 
+## Planted-error switch (simulated)
+
+When the switch is on, the assistant mishears one time on purpose, so the study can see which strategy catches the mistake. The first exact time in a turn the assistant understands is heard as the nearest other free time on the same day (the day said in that turn, or the one already known); on a tie, the earlier one. "A haircut on Friday at half five" is heard as Friday at 6:15 pm. A time is left as it is if no day is known yet, if that day has no other free time, or if the turn answers a read-back ("Yes, 6:15"), and the switch waits for the next exact time. So `summarise` never books a misheard time it has not read back. Only one time per call is misheard: every later time, including a correction, is heard as said. A range ("after five") and a pick by place ("the first one") are never changed. The switch is off unless it is turned on, and works the same under all three strategies and with both readers.
+
 ## Test phrases
 
 Each phrase is run against the demo calendar in `data/calendar.json`.
@@ -85,6 +89,7 @@ Each phrase is run against the demo calendar in `data/calendar.json`.
 | 18 | "I can't do Monday" (after the read-back "a haircut on Monday at 11 am") | Turns the read-back down with a "no" word | Treated as a plain "no" (rule 6): ask which part to change, book nothing |
 | 19 | "I'm busy at 5:30" (after the read-back "a haircut on Friday at 5:30 pm") | Turns the read-back down without a "no" word | Not understood (rule 7): say sorry, read back again, book nothing |
 | 20 | "Thursday" (after "A haircut on Tuesday at 6" is declined and Thursday at 10 am or 2 pm is offered) | Takes the offered day but not the time | Forget 6 pm and ask "What time on Thursday would you like?", under every strategy (rule 4) |
+| 21 | "A haircut on Friday at half five", with the planted-error switch on | The time is misheard as 6:15 pm | `summarise` reads back 6:15 pm, and "No, I said half five" gets the 5:30 pm read-back; `repeat` and `clarify` book 6:15 pm, a miss |
 
 ## Decisions
 
@@ -106,9 +111,9 @@ Each phrase is run against the demo calendar in `data/calendar.json`.
 | v0.8: a question shown only by a "?" ("You said Friday?") | Not understood (rule 7), unless the turn asks for something ("Can I come in on Sunday?", "Friday at 5:30 please?") | Under `clarify` and `repeat`, reading it as a request booked a slot the caller had only asked about, a wrong booking (v0.4) |
 | v0.8: a service that looks like a typing mistake ("bread trim") | Not understood (rule 7), so the last question is asked again (the service question names the services); a service the reader does report is declined like any other (rule 4) | Guessing which service the caller meant ("beard trim") could book the wrong one, and hearing the list lets them spot the typo |
 | v0.8: a turn that is only a time ("10") when the model is unsure | The keyword reader reads it; a number starting with 0 ("0", "05:30") stays unclear | The model reads each turn on its own, and in a real recording it was unsure about a bare "10", while the keyword reader reads a time on its own the same way every time. It would read "0" as 12 pm, so that stays with the model |
+| v0.9: the planted-error switch (step 5): which detail is misheard, and how often | The first exact time is heard as the nearest other free time that day, once per call | A time misheard this way is still bookable, so `summarise` reads back a wrong time the caller can correct, while `repeat` and `clarify` book it (a miss). In the demo calendar a misheard day mostly lands on a taken or empty day and turns into a decline, which no strategy would need to catch. Once per call makes every run the same, so the comparison stays fair, and lets the caller's correction work |
 
 ## Not yet specified
 
-- The planted-error switch: which detail is misheard, and how often.
 - What is logged for each turn.
 - How long the assistant waits before treating silence as a turn.

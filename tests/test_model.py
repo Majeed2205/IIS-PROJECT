@@ -396,12 +396,20 @@ class LiveSwitchTests(unittest.TestCase):
 class ChatWithModelTests(unittest.TestCase):
     """The loop works the same with model answers. These answers are hand-written."""
 
-    def chat(self, strategy, replays):
+    def chat(self, strategy, replays, mishear=False):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         path = Path(folder.name) / "replays.json"
         path.write_text(json.dumps(replays))
-        return Conversation(Calendar.load(), strategy, reader=ModelReader(live=False, replay_path=path))
+        return Conversation(Calendar.load(), strategy, reader=ModelReader(live=False, replay_path=path), mishear=mishear)
+
+    def test_the_planted_error_switch_works_with_the_model(self):
+        chat = self.chat("summarise", {
+            "a haircut on friday at half five": answer(service="haircut", day="friday", time_kind="at", clock="17:30"),
+        }, mishear=True)
+        self.assertEqual(chat.reply("A haircut on Friday at half five"),
+                         "So that's a haircut on Friday at 6:15 pm. Is that right?")
+        self.assertEqual(chat.misheard, ("17:30", "18:15"))
 
     def test_clarify_then_a_reply_only_the_model_understands(self):
         chat = self.chat("clarify", {
