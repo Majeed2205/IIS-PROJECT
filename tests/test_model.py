@@ -526,22 +526,45 @@ class ChatWithModelTests(unittest.TestCase):
         chat.reply("A haircut on Friday after five")
         self.assertEqual(chat.reply("the first one after six"), "Booked: haircut on Friday at 6:15 pm.")  # rule 8
 
-    def test_a_question_with_is_is_not_understood_whatever_the_model_reads(self):
+    def test_a_question_is_not_understood_whatever_the_model_reads(self):
         read_back = "So that's a haircut on Friday at 5:30 pm. Is that right?"
         decline = "I have nothing free on Saturday afternoon. I can offer Monday at 11 am or 4 pm, or you can name another day."
         cases = [
             ("summarise", "A haircut on Friday at half five", "OK, is that right", answer(yes=True), read_back),
             ("summarise", "A haircut on Friday at half five", "Yes, is 6:15 ok", answer(yes=True), read_back),
             ("summarise", "A haircut on Friday at half five", "OK great, is 5:30 right", answer(yes=True), read_back),
+            ("summarise", "A haircut on Friday at half five", "Yes, Friday at 5:30?",
+             answer(yes=True, day="friday", time_kind="at", clock="17:30"), read_back),
             # A model answer that leaves out "haircut" would book a colour here.
             ("clarify", "Colour on Saturday afternoon", "A haircut on Friday at 5:30, is that ok",
              answer(day="friday", time_kind="at", clock="17:30"), decline),
+            ("clarify", "Colour on Saturday afternoon", "A haircut on Friday at 5:30?",
+             answer(day="friday", time_kind="at", clock="17:30"), decline),
+            ("clarify", "Colour on Saturday afternoon", "A haircut on Friday at 5:30?",
+             answer(service="haircut", day="friday", time_kind="at", clock="17:30"), decline),
+            ("clarify", "A haircut on Friday after five", "The first one?", answer(choice="first"),
+             "On Friday after 5 pm I have 5:30 pm or 6:15 pm. Which would you like?"),
         ]
         for strategy, first, text, said, again in cases:
             chat = self.chat(strategy, {text.lower(): said})  # the first turn is read by the keyword reader
             chat.reply(first)
             self.assertEqual(chat.reply(text), "Sorry, I didn't catch that. " + again, text)
             self.assertIsNone(chat.booking, text)
+        chat = self.chat("summarise", {"no, i said thursday?": answer(no=True, day="thursday")})
+        chat.reply("A haircut on Friday at half five")
+        self.assertEqual(chat.reply("No, I said Thursday?"), WHICH_PART)  # rule 6, as the keyword reader
+
+    def test_a_request_with_a_question_mark_uses_the_model(self):
+        chat = self.chat("clarify", {
+            "can i have a haircut on friday at 5:30?": answer(service="haircut", day="friday", time_kind="at", clock="17:30"),
+        })
+        chat.reply("Colour on Saturday afternoon")
+        self.assertEqual(chat.reply("Can I have a haircut on Friday at 5:30?"), "Booked: haircut on Friday at 5:30 pm.")
+        full = answer(service="haircut", day="friday", time_kind="at", clock="17:30")
+        for text in ["Could I squeeze in a haircut on Friday at 5:30?", "A haircut on Friday at 5:30 please?"]:
+            chat = self.chat("clarify", {text.lower(): full})  # the keyword reader does not know "squeeze"
+            chat.reply("Colour on Saturday afternoon")
+            self.assertEqual(chat.reply(text), "Booked: haircut on Friday at 5:30 pm.", text)
 
     def test_a_greeting_is_not_filled_in_as_a_time(self):
         chat = self.chat("clarify", {"morning! can i book a haircut on thursday?": answer(service="haircut", day="thursday")})

@@ -8,7 +8,9 @@ saved in data/replays.json. A sentence with no saved answer, or a live call
 that fails, goes to the simple keyword reader in understand.py (simulated).
 The keyword reader also fills in a detail the model left out, when it knows
 every word of the turn, and reads a turn that is only a time ("10") when the
-model is unsure (see to_heard).
+model is unsure. Two of its question rules overrule the model: a "?" turn that
+does not ask for something ("You said Friday?") and a turn like "OK, is that
+right" are not understood, whatever the model read (see to_heard).
 
 The model only fills in what the caller said. It never decides what the
 assistant does next: that is decide() in policy.py.
@@ -23,7 +25,7 @@ from pathlib import Path
 
 from .policy import DAY_PARTS
 from .slots import DAYS
-from .understand import CHOICES, MINUTES, TIME_WORDS, YES_WORDS, asks_with_is, read_number, understand, unclear
+from .understand import CHOICES, MINUTES, TIME_WORDS, YES_WORDS, asks_about_something, read_number, understand, unclear
 
 MODEL = "claude-haiku-5-5"
 ROOT = Path(__file__).resolve().parent.parent
@@ -118,7 +120,9 @@ def to_heard(answer: dict, text: str, services: list[str]) -> dict:
     A turn that is not understood is checked for a "no" word ("I can't do Monday") and a part
     the same way as in the keyword reader, so both readers give the same reply (rule 6).
     If the model is unsure about a turn that is only a time ("10"), the keyword reader reads it.
-    A turn that asks with "is" ("OK, is that right") is not understood, whatever the model read.
+    A "?" turn that does not ask for something ("You said Friday?"), or a turn that asks_with_is()
+    finds ("OK, is that right"), is not understood, whatever the model read. Other questions, such
+    as "Is 6:15 free", are left to the model.
     """
     words_heard = understand(text, services, first_turn=True)  # "Morning!" at the start is a greeting
     not_understood = unclear(dict(words_heard))
@@ -134,7 +138,7 @@ def to_heard(answer: dict, text: str, services: list[str]) -> dict:
     if answer["unclear"] or (answer["yes"] and answer["no"]):  # "yeah no" is not clear either
         return not_understood
     words = [word.strip("?,.!'\"") for word in text.lower().split()]
-    if asks_with_is(words):
+    if asks_about_something(text, words):
         return not_understood  # a question (rule 7), even if the model read a yes or a request
 
     service = answer.get("service")

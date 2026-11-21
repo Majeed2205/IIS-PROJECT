@@ -74,9 +74,7 @@ def understand(text: str, services: list[str], first_turn: bool = False) -> dict
     heard["no"] = starts_with_no or any(is_negative(word) for word in words)
 
     is_question = (len(words) > 0 and words[0] in QUESTION_STARTS) or any(w in QUESTION_WORDS for w in words)
-    if "?" in text and not asks_for_something(words):
-        is_question = True
-    if asks_with_is(words):
+    if asks_about_something(text, words):
         is_question = True
     # We only act on a turn if we know every word in it. A "no" or "not" in the
     # middle is not a known word, because we can't tell what is being turned down.
@@ -275,6 +273,17 @@ def only_yes_words(words: list[str], heard: dict, service_words: list[str]) -> b
             continue
         return False
     return True
+
+
+def asks_about_something(text: str, words: list[str]) -> bool:
+    """True for a "?" turn that does not ask for something ("You said Friday?"), or a turn that
+    asks_with_is() finds ("OK, is that right") (rule 7). A "?" turn that asks for something is
+    a request (v0.8).
+
+    Both readers use it. understand() also counts a turn that starts with a word in QUESTION_STARTS
+    ("Is 6:15 free") or has one in QUESTION_WORDS ("How about 6:15 please?") as a question.
+    """
+    return ("?" in text and not asks_for_something(words)) or asks_with_is(words)
 
 
 def asks_with_is(words: list[str]) -> bool:
