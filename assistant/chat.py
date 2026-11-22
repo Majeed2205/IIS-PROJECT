@@ -14,7 +14,7 @@ from .mishear import misheard_time
 from .model import ModelReader
 from .policy import ASK_AGAIN, BOOK, CONFIRM, DECLINE, HANDOVER, STRATEGIES, Request, decide
 from .slots import Calendar
-from .understand import understand
+from .understand import unclear, understand
 
 WHICH_PART = "Which part should I change: the service, the day or the time?"
 GIVE_UP = "I'm sorry, I'm having trouble understanding. I'll ask a member of staff to call you back."
@@ -63,6 +63,13 @@ class Conversation:
         if heard["no"] and not after_read_back and not self.asked_which_part:
             heard = understand("", self.calendar.services)
             heard["unclear"] = True
+        # Rule 8: a pick by place needs a slot to pick ("the first one" with nothing offered, "the third one"
+        # after two). Only the pick is left out, so a time said with it still decides ("the first one after six").
+        options = last.options if last is not None else ()
+        if heard["choice"] is not None and heard["choice"] >= len(options):
+            heard = dict(heard, choice=None)
+            if not has_details(heard):
+                heard = unclear(heard)  # keeps a "no", so after a read-back it still gets rule 6
 
         # Step 5 (simulated): after the line above, so a turn that is thrown away does not use it up,
         # and not in an answer to a read-back, so summarise never books a time it has not read back.
@@ -73,25 +80,29 @@ class Conversation:
         if after_read_back:
             if heard["yes"] and agrees(heard, last.slot, self.request.service):
                 return self.book(last.slot.day, last.slot.time)
-            # Rule 6: a "no" that does not say what is wrong ("No", "I can't do Monday").
-            # "No, wrong time" is handled below.
-            if heard["no"] and not has_details(heard) and not heard["parts"]:
+            # Rule 6: a "no" that does not say what is wrong ("No", "I can't do Monday"), or only names
+            # what is right ("No, Friday's fine"). "No, wrong time" is handled below.
+            same = agrees(heard, last.slot, self.request.service)
+            if heard["no"] and not heard["parts"] and (not has_details(heard) or same):
                 self.last_action = None
                 self.asked_which_part = True
                 if heard["unclear"]:
-                    self.not_understood += 1  # "I can't do Monday" still counts towards the handover (rule 7)
-                else:
-                    self.not_understood = 0
-                if self.not_understood >= MAX_NOT_UNDERSTOOD:
-                    self.finished = True
-                    return GIVE_UP
+                    return self.count_and_ask(WHICH_PART)  # "I can't do Monday" still counts (rule 7)
+                self.not_understood = 0
                 return WHICH_PART
 
         old_request = self.request
         self.update_request(heard)
+        # Rule 6: after "Which part?", a turn that names no part and changes nothing gets the question again:
+        # one with no detail ("No", "Yes"), or a "no" that only names what is right ("No, Friday's fine").
+        if self.asked_which_part and not heard["parts"] and self.request == old_request:
+            if heard["no"] or not has_details(heard):
+                return self.count_and_ask(("Sorry, I didn't catch that. " if heard["unclear"] else "") + WHICH_PART)
         self.asked_which_part = False
+        missed = heard["unclear"] and self.request == old_request  # rule 7: not understood, so nothing changed
 
-        action = decide(self.request, self.strategy, self.calendar, self.repeats_asked)
+        # Rule 7: a turn not understood is not a repeat, so with 0 repeats decide() never hands over for it.
+        action = decide(self.request, self.strategy, self.calendar, 0 if missed else self.repeats_asked)
         # Rule 8: the slots a decline offered can still be picked when we ask for the time that day,
         # even after another question ("What would you like to book?") in between.
         if action.kind == DECLINE and action.options:  # "we don't offer massage" keeps the slots
@@ -101,23 +112,27 @@ class Conversation:
         self.last_action = action
         if action.kind == BOOK:
             return self.book(action.slot.day, action.slot.time)
-        if action.kind == ASK_AGAIN:
+        if action.kind == ASK_AGAIN and not missed:
             self.repeats_asked += 1
         if action.kind == HANDOVER:
             self.finished = True
             return action.say
 
         # Rule 7: the last turn was not understood, so nothing changed.
-        if heard["unclear"] and self.request == old_request:
-            self.not_understood += 1
-            if self.not_understood >= MAX_NOT_UNDERSTOOD:
-                self.finished = True
-                return GIVE_UP
-            if action.kind != ASK_AGAIN:
-                return "Sorry, I didn't catch that. " + action.say
-        else:
-            self.not_understood = 0
+        if missed:
+            if action.kind == ASK_AGAIN:  # under repeat, the normal ask-again question
+                return self.count_and_ask(action.say)
+            return self.count_and_ask("Sorry, I didn't catch that. " + action.say)
+        self.not_understood = 0
         return action.say
+
+    def count_and_ask(self, say: str) -> str:
+        """Count a turn that got nowhere (rules 6 and 7), and hand over after three in a row."""
+        self.not_understood += 1
+        if self.not_understood >= MAX_NOT_UNDERSTOOD:
+            self.finished = True
+            return GIVE_UP
+        return say
 
     def update_request(self, heard: dict) -> None:
         """Change only the details the caller just gave (rule 5), and forget details when rule 4 or 6 says so."""

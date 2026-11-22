@@ -7,7 +7,7 @@
 | Mock calendar (one demo week, fictional salon) | `assistant/slots.py`, `data/calendar.json` | Implemented (step 1) |
 | Booking function and status sentence | `assistant/booking.py` | Implemented (step 1) |
 | Repair policy (`repeat`, `clarify`, `summarise`) | `assistant/policy.py` | Implemented (step 2) |
-| Handover to staff after two failed repeats, or three turns not understood | `assistant/policy.py`, `assistant/chat.py` | Simulated: the assistant says staff will call back; no call happens |
+| Handover to staff after two failed repeats, or three turns in a row that get nowhere (not understood, or no answer to the which-part question) | `assistant/policy.py`, `assistant/chat.py` | Simulated: the assistant says staff will call back; no call happens |
 | Conversation loop (typed input in the terminal) | `assistant/chat.py` | Implemented (step 3) |
 | Understanding step: Claude Haiku 5.5 turns the caller's words into details | `assistant/model.py` | Implemented (step 4). Live calls need an API key; without one it replays saved answers. If the model leaves out a detail of a turn the keyword reader fully understands, the keyword reader fills it in, and it reads a turn that is only a time ("10") when the model is unsure. A "?" turn that does not ask for something ("You said Friday?"), or a question like "OK, is that right", is not understood, whatever the model read (rule 7) |
 | Saved model answers for replay mode | `data/replays.json`, made by `assistant/record.py` | Implemented; the file appears once the answers are recorded with a key |

@@ -49,9 +49,9 @@ class PlantedErrorTests(unittest.TestCase):
 
     def test_only_one_time_per_call(self):
         chat = Conversation(Calendar.load(), "summarise", mishear=True)
-        chat.reply("A haircut on Friday at half five")
-        self.assertEqual(chat.reply("No, I said 6:15"), "So that's a haircut on Friday at 6:15 pm. Is that right?")
+        chat.reply("A haircut on Friday at half five")  # heard as 6:15
         self.assertEqual(chat.reply("No, half five"), READ_BACK)
+        self.assertEqual(chat.reply("No, 6:15"), "So that's a haircut on Friday at 6:15 pm. Is that right?")
         chat = Conversation(Calendar.load(), "summarise", mishear=True)
         chat.reply("A haircut on Friday at half five")
         self.assertEqual(chat.reply("No"), "Which part should I change: the service, the day or the time?")

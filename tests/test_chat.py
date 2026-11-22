@@ -57,7 +57,7 @@ class ChatTests(unittest.TestCase):
     def test_3_a_choice_that_was_not_offered(self):
         chat = self.start("clarify")
         question = chat.reply("A haircut on Friday after five")
-        self.assertEqual(chat.reply("the third one"), question)
+        self.assertEqual(chat.reply("the third one"), "Sorry, I didn't catch that. " + question)  # rule 8
         self.assertIsNone(chat.booking)
 
     def test_3_repeat_hands_over_after_two_repeats(self):
@@ -341,7 +341,8 @@ class ChatTests(unittest.TestCase):
         chat = self.start("clarify")
         chat.reply("A haircut on Sunday")  # declined: Monday at 11 am or 4 pm is offered
         self.assertEqual(chat.reply("Friday"), "What time on Friday would you like?")
-        self.assertEqual(chat.reply("the first one"), "What time on Friday would you like?")  # not Monday at 11 am
+        self.assertEqual(chat.reply("the first one"),  # not Monday at 11 am: nothing on Friday was offered
+                         "Sorry, I didn't catch that. What time on Friday would you like?")
         self.assertIsNone(chat.booking)
 
     def test_the_first_one_after_the_service_question_is_not_a_pick(self):
@@ -500,7 +501,7 @@ class SafetyTests(unittest.TestCase):
         chat = Conversation(Calendar.load(), "summarise")
         chat.reply("A haircut on Friday at half five")
         chat.reply("No")
-        self.assertEqual(chat.reply("yes"), READ_BACK)
+        self.assertEqual(chat.reply("yes"), WHICH_PART)  # a yes names no part (rule 6)
         self.assertIsNone(chat.booking)
 
     def test_offers_are_not_chosen_by_accident(self):
@@ -698,6 +699,77 @@ class SafetyTests(unittest.TestCase):
     def test_unknown_strategy_is_an_error(self):
         with self.assertRaises(ValueError):
             Conversation(Calendar.load(), "guess")
+
+
+class LoopTests(unittest.TestCase):
+    """A call must not go round in circles (v0.6), and repeat must only count real repeats."""
+
+    def replies(self, strategy, turns):
+        chat = Conversation(Calendar.load(), strategy)
+        return [chat.reply(turn) for turn in turns], chat
+
+    def test_a_turn_not_understood_is_not_a_repeat(self):
+        again = "Sorry, could you say your whole request again?"
+        handover = "I'm sorry, I couldn't find one time that fits. I'll ask a member of staff to call you back."
+        said, chat = self.replies("repeat", ["A haircut on Friday after five", "I'm busy",
+                                             "A haircut on Friday after five", "A haircut on Friday after five"])
+        self.assertEqual(said, [again, again, again, handover])
+        said, chat = self.replies("repeat", ["A haircut on Friday after five", "A haircut on Friday after five",
+                                             "A haircut on Friday after five", "I'm busy"])
+        self.assertEqual(said[2:], [handover, "This call has ended."])
+        said, chat = self.replies("repeat", ["A haircut on Friday after five", "A haircut on Friday after five",
+                                             "I'm busy", "A haircut on Friday after five"])
+        self.assertEqual(said, [again, again, again, handover])  # rule 7, then the second real repeat
+        said, chat = self.replies("repeat", ["A haircut on Friday after five", "I'm busy", "I'm busy", "I'm busy"])
+        self.assertEqual(said[3], GIVE_UP)  # three turns not understood still hand over
+
+    def test_a_plain_no_after_which_part_asks_again_and_counts(self):
+        said, chat = self.replies("summarise", ["A haircut on Friday at half five", "No", "No", "Yes", "No"])
+        self.assertEqual(said[1:4], [WHICH_PART, WHICH_PART, WHICH_PART])
+        self.assertEqual(said[4], GIVE_UP)
+        self.assertIsNone(chat.booking)
+        said, chat = self.replies("summarise", ["A haircut on Friday at half five", "No", "Thursday?"])
+        self.assertEqual(said[2], "Sorry, I didn't catch that. " + WHICH_PART)
+
+    def test_after_which_part_a_part_or_a_detail_still_works(self):
+        said, chat = self.replies("summarise", ["A haircut on Friday at half five", "No", "No", "the time"])
+        self.assertEqual(said[3], "What time on Friday would you like?")
+        said, chat = self.replies("summarise", ["A haircut on Friday at half five", "No", "No", "6:15"])
+        self.assertEqual(said[3], "So that's a haircut on Friday at 6:15 pm. Is that right?")
+
+    def test_a_no_that_repeats_the_read_back_asks_which_part(self):
+        for text in ["No, Friday's fine", "No, 5:30 is fine", "No, a haircut", "No, after five"]:
+            said, chat = self.replies("summarise", ["A haircut on Friday at half five", text])
+            self.assertEqual(said[1], WHICH_PART, text)
+        said, chat = self.replies("summarise", ["A haircut on Friday at half five"] + ["No, Friday's fine"] * 5)
+        self.assertEqual(said[1:], [WHICH_PART] * 3 + [GIVE_UP, "This call has ended."])  # rule 6, then rule 7
+        said, chat = self.replies("summarise", ["A haircut on Friday at half five", "No", "Friday"])
+        self.assertEqual(said[2], READ_BACK)  # a detail without a "no" is still read back
+        said, chat = self.replies("summarise", ["A haircut on Friday at half five", "No, I said Thursday"])
+        self.assertNotEqual(said[1], WHICH_PART)  # a new detail is still a correction (rule 5)
+
+    def test_a_pick_with_nothing_to_pick_is_not_understood(self):
+        said, chat = self.replies("clarify", ["the first one", "the first one", "the first one"])
+        self.assertEqual(said[:2], ["Sorry, I didn't catch that. Which day would you like to come in?"] * 2)
+        self.assertEqual(said[2], GIVE_UP)
+        offer = "On Friday after 5 pm I have 5:30 pm or 6:15 pm. Which would you like?"
+        said, chat = self.replies("clarify", ["A haircut on Friday after five", "the third one", "the second one"])
+        self.assertEqual(said[1:], ["Sorry, I didn't catch that. " + offer, "Booked: haircut on Friday at 6:15 pm."])
+
+    def test_a_time_said_with_a_pick_that_cannot_be_made_still_decides(self):
+        said, chat = self.replies("clarify", ["A haircut on Friday", "the first one after six"])
+        self.assertEqual(said[1], "Booked: haircut on Friday at 6:15 pm.")
+        said, chat = self.replies("clarify", ["A haircut on Friday after five", "the third one at 6:15"])
+        self.assertEqual(said[1], "Booked: haircut on Friday at 6:15 pm.")
+        said, chat = self.replies("clarify", ["A beard trim", "the first one on Monday"])
+        self.assertEqual(said[1], "What time on Monday would you like?")
+
+    def test_a_no_with_a_pick_that_cannot_be_made_asks_which_part(self):
+        said, chat = self.replies("summarise", ["A haircut on Friday at half five", "No, the first one"])
+        self.assertEqual(said[1], WHICH_PART)  # not understood, with a "no" after a read-back (rule 7)
+        self.assertEqual(chat.not_understood, 1)
+        said, chat = self.replies("summarise", ["A haircut on Friday at half five", "No", "the first one, the time"])
+        self.assertEqual(said[2], "What time on Friday would you like?")
 
 
 if __name__ == "__main__":

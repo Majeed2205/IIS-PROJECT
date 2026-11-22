@@ -435,6 +435,7 @@ class ChatWithModelTests(unittest.TestCase):
             "a haircut on friday at half five": answer(service="haircut", day="friday", time_kind="at", clock="17:30"),
             "friday's fine": answer(yes=True, day="friday"),
             "yeah no": answer(yes=True, no=True),
+            "half five": answer(time_kind="at", clock="17:30"),
             "yes": answer(yes=True),
         })
         chat.reply("A haircut on Friday at half five")
@@ -442,7 +443,7 @@ class ChatWithModelTests(unittest.TestCase):
         self.assertIsNone(chat.booking)
         self.assertEqual(chat.reply("Yeah no"), WHICH_PART)  # "yeah no" means no
         self.assertIsNone(chat.booking)
-        chat.reply("yes")  # the read-back is said again
+        self.assertEqual(chat.reply("half five"), "So that's a haircut on Friday at 5:30 pm. Is that right?")
         self.assertEqual(chat.reply("yes"), "Booked: haircut on Friday at 5:30 pm.")
 
     def test_a_no_from_the_model_asks_which_part(self):
