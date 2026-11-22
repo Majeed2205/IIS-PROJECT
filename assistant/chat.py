@@ -2,18 +2,21 @@
 
 Status: implemented. Typed input in the terminal:  python -m assistant.chat clarify
 The terminal uses the model reader (model.py); the tests use the keyword reader.
-With --mishear the planted-error switch (mishear.py, simulated) mishears one time.
+With --mishear the planted-error switch (mishear.py, simulated) mishears one time,
+and with --log every turn is recorded in logs/ (turnlog.py).
 """
 from __future__ import annotations
 
 import sys
 from dataclasses import replace
+from time import monotonic
 
 from .booking import BOOKED, BookingDesk, describe
 from .mishear import misheard_time
 from .model import ModelReader
 from .policy import ASK_AGAIN, BOOK, CONFIRM, DECLINE, HANDOVER, STRATEGIES, Request, decide
 from .slots import Calendar
+from .turnlog import TurnFile, new_log_path, turn_record
 from .understand import unclear, understand
 
 WHICH_PART = "Which part should I change: the service, the day or the time?"
@@ -23,7 +26,7 @@ MAX_NOT_UNDERSTOOD = 3  # turns in a row before handing over (simulated, like th
 
 class Conversation:
     def __init__(self, calendar: Calendar, strategy: str, call_id: str = "call-1", reader=understand,
-                 mishear: bool = False):
+                 mishear: bool = False, log=None):
         if strategy not in STRATEGIES:
             raise ValueError(f"Unknown strategy: {strategy!r}")
         self.reader = reader  # turns the caller's words into details
@@ -41,14 +44,29 @@ class Conversation:
         self.booking = None    # the BookingResult once the caller is booked
         self.finished = False  # True after a handover
         self.offered = ()      # the slots the last decline offered
+        self.log = log         # step 6: a list or TurnFile that gets one record per turn
+        self.turns = 0
+        self.started = monotonic()
+        self.turn = {}         # what happened in this turn, for the log
 
     def reply(self, text: str) -> str:
-        """Take one caller turn and return what the assistant says."""
+        """Take one caller turn and return what the assistant says. With a log, record the turn too."""
+        self.turns += 1
+        self.turn = {"reader": None, "read": None, "misheard": None, "decided": None, "booking": None}
+        said = self.answer(text)
+        if self.log is not None:
+            self.log.append(turn_record(self, text, said))
+        return said
+
+    def answer(self, text: str) -> str:
+        """The assistant's reply to one caller turn."""
         if self.finished:
             return "This call has ended."
 
         first_turn = self.request == Request()  # the caller has not asked for anything yet
         heard = self.reader(text, self.calendar.services, first_turn)
+        self.turn["read"] = dict(heard)
+        self.turn["reader"] = getattr(self.reader, "source", "keyword reader")
 
         # Already booked: saying "yes" or "book it" again must not book twice.
         if self.booking is not None:
@@ -103,6 +121,7 @@ class Conversation:
 
         # Rule 7: a turn not understood is not a repeat, so with 0 repeats decide() never hands over for it.
         action = decide(self.request, self.strategy, self.calendar, 0 if missed else self.repeats_asked)
+        self.turn["decided"] = action
         # Rule 8: the slots a decline offered can still be picked when we ask for the time that day,
         # even after another question ("What would you like to book?") in between.
         if action.kind == DECLINE and action.options:  # "we don't offer massage" keeps the slots
@@ -199,6 +218,7 @@ class Conversation:
         if wrong is None:
             return heard  # no day yet, or nothing else free that day: wait for the next time
         self.misheard = (heard["time"], wrong)
+        self.turn["misheard"] = [heard["time"], wrong]
         return dict(heard, time=wrong)
 
     def book(self, day: str, time: str) -> str:
@@ -206,6 +226,7 @@ class Conversation:
         # Same call and same slot gives the same id, so a repeat is never booked twice.
         request_id = f"{self.call_id}-{day}-{time}"
         result = self.desk.book(request_id, self.request.service, day, time)
+        self.turn["booking"] = result
         if result.status == BOOKED:
             self.booking = result
         return describe(result)
@@ -231,23 +252,27 @@ def agrees(heard: dict, slot, service: str) -> bool:
     return heard["choice"] is None and not heard["parts"]
 
 
-def read_args(args: list[str]) -> tuple[str, bool]:
-    """The strategy (clarify if none is given) and whether --mishear was given."""
-    words = [arg for arg in args if arg != "--mishear"]
-    return (words[0] if words else "clarify"), "--mishear" in args
+def read_args(args: list[str]) -> tuple[str, bool, bool]:
+    """The strategy (clarify if none is given), and whether --mishear and --log were given."""
+    words = [arg for arg in args if arg not in ("--mishear", "--log")]
+    return (words[0] if words else "clarify"), "--mishear" in args, "--log" in args
 
 
 def main() -> None:
-    strategy, mishear = read_args(sys.argv[1:])
+    strategy, mishear, logging = read_args(sys.argv[1:])
     if strategy not in STRATEGIES:
-        print("Usage: python -m assistant.chat [repeat | clarify | summarise] [--mishear]")
+        print("Usage: python -m assistant.chat [repeat | clarify | summarise] [--mishear] [--log]")
         return
 
     reader = ModelReader()
-    chat = Conversation(Calendar.load(), strategy, reader=reader, mishear=mishear)
+    path = new_log_path(strategy)
+    log = TurnFile(path) if logging else None
+    chat = Conversation(Calendar.load(), strategy, call_id=path.stem, reader=reader, mishear=mishear, log=log)
     print(f"Demo Salon booking assistant ({strategy}). Type 'quit' to stop.")
     if mishear:
         print("Planted-error switch: on. One time you say will be misheard (simulated).")
+    if logging:
+        print(f"Turn log: on. Every turn is written to logs/{path.name}, including what you type.")
     if reader.live:
         print("Understanding: Claude Haiku 5.5 (live). New answers are saved in data/replays.json.")
     else:

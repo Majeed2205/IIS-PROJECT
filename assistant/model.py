@@ -96,6 +96,7 @@ class ModelReader:
         self.replays = load_replays(self.replay_path)
         self.live = has_key() if live is None else live
         self.ask = ask if ask is not None else ask_model
+        self.source = None  # who read the last turn, for the turn log
         if self.live and ask is None and importlib.util.find_spec("anthropic") is None:
             warn("The anthropic package is not installed (pip install -r requirements.txt), so replay mode is used.")
             self.live = False
@@ -103,14 +104,20 @@ class ModelReader:
     def __call__(self, text: str, services: list[str], first_turn: bool = False) -> dict:
         key = " ".join(text.lower().split())
         answer = self.replays.get(key)
+        self.source = "saved model answer"
         if answer is None and self.live and key:
             answer = self.ask(text, services)
+            self.source = "live model"
             if answer is not None:
                 self.replays[key] = answer
                 save_replays(self.replays, self.replay_path)
         if answer is None:
+            self.source = "keyword reader"
             return understand(text, services, first_turn)  # the simple keyword reader
-        return to_heard(answer, text, services)
+        heard = to_heard(answer, text, services)
+        if answer.get("unclear") is True and not heard["unclear"]:
+            self.source = "keyword reader"  # the model was unsure about a turn that is only a time (v0.8)
+        return heard
 
 
 def to_heard(answer: dict, text: str, services: list[str]) -> dict:

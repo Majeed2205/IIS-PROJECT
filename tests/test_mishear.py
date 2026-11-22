@@ -1,6 +1,6 @@
 import unittest
 
-from assistant.chat import Conversation, read_args
+from assistant.chat import Conversation
 from assistant.mishear import misheard_time
 from assistant.slots import Calendar
 
@@ -104,14 +104,6 @@ class PlantedErrorTests(unittest.TestCase):
         chat = Conversation(Calendar.load(), "summarise")
         self.assertEqual(chat.reply("A haircut on Friday at half five"), READ_BACK)
         self.assertIsNone(chat.misheard)
-
-
-class ArgsTests(unittest.TestCase):
-    def test_read_args(self):
-        self.assertEqual(read_args([]), ("clarify", False))
-        self.assertEqual(read_args(["summarise"]), ("summarise", False))
-        self.assertEqual(read_args(["summarise", "--mishear"]), ("summarise", True))
-        self.assertEqual(read_args(["--mishear", "repeat"]), ("repeat", True))
 
 
 if __name__ == "__main__":

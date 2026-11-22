@@ -13,7 +13,7 @@
 | Saved model answers for replay mode | `data/replays.json`, made by `assistant/record.py` | Implemented; the file appears once the answers are recorded with a key |
 | Keyword reader for typed input | `assistant/understand.py` | Simulated: used for a sentence with no saved answer when there is no key, or when a live call fails (a [model] message is printed). Also fills in a detail the model left out (see above) |
 | Planted-error switch: mishears one time on purpose, to show which strategy catches it | `assistant/mishear.py`, `assistant/chat.py` | Simulated (step 5): off unless `--mishear` is given. One exact time per call is heard as the nearest other free time that day ("half five" on Friday as 6:15 pm); the spec says when it waits |
-| Turn logging | | Planned (step 6) |
+| Turn logging: one record per turn, for the study | `assistant/turnlog.py`, `assistant/chat.py` | Implemented (step 6): off unless `--log` is given. Each call goes to its own file in `logs/` (ignored by git), one JSON record per line. The records hold what the caller typed, so keep them only with consent |
 | Voice in the browser, standing in for a phone line | | Planned (step 7), simulated |
 
 ## How to run
@@ -23,6 +23,7 @@ python -m unittest -v
 python -m assistant.demo
 python -m assistant.chat clarify      # or repeat / summarise
 python -m assistant.chat summarise --mishear   # with the planted-error switch on
+python -m assistant.chat summarise --log       # writes one record per turn to logs/
 ```
 
 The tests and the chat need no key and nothing installed: without a key the

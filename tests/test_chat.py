@@ -1,7 +1,7 @@
 import unittest
 
 from assistant.booking import describe
-from assistant.chat import GIVE_UP, WHICH_PART, Conversation
+from assistant.chat import GIVE_UP, WHICH_PART, Conversation, read_args
 from assistant.slots import Calendar, Slot
 
 READ_BACK = "So that's a haircut on Friday at 5:30 pm. Is that right?"
@@ -770,6 +770,16 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(chat.not_understood, 1)
         said, chat = self.replies("summarise", ["A haircut on Friday at half five", "No", "the first one, the time"])
         self.assertEqual(said[2], "What time on Friday would you like?")
+
+
+class ArgsTests(unittest.TestCase):
+    def test_read_args(self):
+        self.assertEqual(read_args([]), ("clarify", False, False))
+        self.assertEqual(read_args(["summarise"]), ("summarise", False, False))
+        self.assertEqual(read_args(["summarise", "--mishear"]), ("summarise", True, False))
+        self.assertEqual(read_args(["--mishear", "repeat"]), ("repeat", True, False))
+        self.assertEqual(read_args(["repeat", "--log"]), ("repeat", False, True))
+        self.assertEqual(read_args(["--log", "--mishear", "summarise"]), ("summarise", True, True))
 
 
 if __name__ == "__main__":
