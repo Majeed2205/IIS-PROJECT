@@ -1,0 +1,200 @@
+<!doctype html>
+<!-- The simulated phone line for step 7 (status: simulated). voice.py serves this page.
+     The browser listens and speaks; the Python Conversation decides every reply. -->
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo Salon line</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 34rem; margin: 2rem auto; padding: 0 1rem;
+         color: #1d1d1f; background: #f5f5f7; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.2rem; }
+  .note { color: #6e6e73; font-size: 0.9rem; margin-top: 0; }
+  button { font-size: 1.1rem; padding: 0.7rem 1.4rem; border-radius: 0.6rem; border: none; margin: 0.3rem 0.3rem 0.3rem 0;
+           background: #0071e3; color: white; cursor: pointer; }
+  button:disabled { background: #a1a1a6; cursor: default; }
+  #talk { font-size: 1.4rem; padding: 1.2rem 2.4rem; }
+  #status { font-size: 1.2rem; min-height: 1.6rem; margin: 1rem 0; }
+  label, select { font-size: 0.95rem; }
+  #transcript { background: white; border-radius: 0.6rem; padding: 0.8rem 1rem; margin-top: 1rem; }
+  #transcript p { margin: 0.3rem 0; }
+  #typed { margin-top: 1rem; }
+</style>
+</head>
+<body>
+<h1>Demo Salon booking line</h1>
+<p class="note">A simulated phone call: you speak and the assistant answers out loud.</p>
+
+<button id="start">Start call</button>
+<button id="talk" disabled>Talk</button>
+<p id="status">Press "Start call".</p>
+
+<p><label>Voice <select id="voice"></select></label></p>
+<p class="note" id="nopremium">No Premium voice found, so a plainer voice is used. To get one: System Settings,
+  Accessibility, Spoken Content, System Voice, Manage Voices; download a Premium English voice, then quit and reopen the browser.</p>
+<p><label><input type="checkbox" id="show"> Show transcript (for the experimenter)</label></p>
+<div id="transcript" hidden></div>
+
+<form id="typed" hidden>
+  <p class="note">This browser cannot listen, so type what the caller says.</p>
+  <input id="text" size="34" disabled> <button id="send" disabled>Send</button>
+</form>
+
+<script>
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const startButton = document.getElementById("start");
+const talkButton = document.getElementById("talk");
+const statusLine = document.getElementById("status");
+const voiceMenu = document.getElementById("voice");
+const transcript = document.getElementById("transcript");
+let listener = null;  // the Talk that is listening now, if any
+let speaking = null;  // the reply being read out (kept here so the browser does not drop it early)
+
+// Let the caller take a turn, or not: the Talk button and the typed box go together.
+function ready(on) {
+  talkButton.disabled = !on;
+  document.getElementById("text").disabled = !on;
+  document.getElementById("send").disabled = !on;
+}
+
+function note(who, words) {
+  const line = document.createElement("p");
+  line.textContent = who + ": " + words;
+  transcript.appendChild(line);
+}
+
+// The voices: English ones that run on this computer (Chrome's online "Google" voices are left out).
+// The natural Premium and Enhanced voices come first, then the default voice and British voices.
+// When the computer has a Premium or Enhanced voice, one of them is used.
+function fillVoices() {
+  const voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith("en") && v.localService);
+  const natural = v => /premium|enhanced/i.test(v.name);
+  const rank = v => natural(v) ? 0 : v.default ? 1 : v.lang === "en-GB" ? 2 : 3;
+  voices.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+  let saved = null;
+  try { saved = localStorage.getItem("voice"); } catch (e) {}
+  const hasNatural = voices.some(natural);
+  if (hasNatural && !voices.some(v => v.name === saved && natural(v))) saved = voices[0].name;
+  document.getElementById("nopremium").hidden = hasNatural;
+  voiceMenu.innerHTML = "";
+  for (const v of voices) {
+    const option = new Option(v.name + " (" + v.lang + ")", v.name);
+    option.selected = v.name === saved;
+    voiceMenu.add(option);
+  }
+}
+speechSynthesis.onvoiceschanged = fillVoices;
+fillVoices();
+voiceMenu.onchange = () => { try { localStorage.setItem("voice", voiceMenu.value); } catch (e) {} };
+
+// Say the reply out loud, then let the caller talk again (unless the call has ended).
+function speak(reply, finished) {
+  note("Assistant", reply);
+  const words = new SpeechSynthesisUtterance(reply);
+  words.voice = speechSynthesis.getVoices().find(v => v.name === voiceMenu.value) || null;
+  words.lang = "en-GB";
+  // Also when speaking fails, so the call can go on. A reply from a call that was replaced is ignored.
+  words.onend = words.onerror = () => {
+    if (speaking !== words) return;
+    speaking = null;
+    ready(!finished);
+    statusLine.textContent = finished ? "The call has ended." : 'Press "Talk" and speak.';
+  };
+  speaking = words;
+  statusLine.textContent = "Speaking...";
+  ready(false);
+  speechSynthesis.speak(words);
+}
+
+// Start call waits while a request is out, so two calls never mix.
+async function send(path, body) {
+  startButton.disabled = true;
+  try {
+    const response = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"},
+                                        body: JSON.stringify(body)});
+    if (!response.ok) throw new Error("the server answered " + response.status);
+    return await response.json();
+  } finally {
+    startButton.disabled = false;
+  }
+}
+
+async function turn(said) {
+  note("Caller", said);
+  statusLine.textContent = "Thinking...";
+  ready(false);
+  try {
+    const answer = await send("/turn", {text: said});
+    speak(answer.reply, answer.finished);
+  } catch (e) {
+    statusLine.textContent = 'The line did not answer. Press "Talk" and say it again.';
+    ready(true);
+  }
+}
+
+// A new call stops the old one first: its reply and its listening.
+startButton.onclick = async () => {
+  speaking = null;
+  speechSynthesis.cancel();
+  const old = listener;
+  listener = null;
+  if (old) old.abort();
+  ready(false);
+  transcript.innerHTML = "";
+  try {
+    const answer = await send("/start", {});
+    startButton.textContent = "New call";
+    speak(answer.reply, answer.finished);
+  } catch (e) {
+    statusLine.textContent = 'The line did not answer. Is voice.py running? Press "Start call" again.';
+  }
+};
+
+// One press is one turn. The browser decides when the caller has stopped.
+// Silence is never a turn: if nothing was heard, nothing is sent.
+// A listener from a call that was replaced is ignored.
+talkButton.onclick = () => {
+  const mine = new Recognition();
+  listener = mine;
+  mine.lang = "en-GB";
+  mine.interimResults = false;
+  mine.maxAlternatives = 1;
+  let heard = "";
+  mine.onresult = event => { heard = event.results[0][0].transcript; };
+  mine.onerror = event => {
+    if (listener === mine) statusLine.textContent = "Could not listen (" + event.error + "). Press \"Talk\" again.";
+  };
+  mine.onend = () => {
+    if (listener !== mine) return;
+    listener = null;
+    if (heard.trim()) {
+      turn(heard);
+    } else {
+      ready(true);
+      if (statusLine.textContent === "Listening...") statusLine.textContent = 'Nothing heard. Press "Talk" again.';
+    }
+  };
+  ready(false);
+  statusLine.textContent = "Listening...";
+  mine.start();
+};
+
+const showBox = document.getElementById("show");
+showBox.onchange = () => { transcript.hidden = !showBox.checked; };
+transcript.hidden = !showBox.checked;  // a browser may keep the tick after a reload
+
+if (!Recognition) {  // Firefox cannot listen, so the experimenter types instead
+  talkButton.hidden = true;
+  const form = document.getElementById("typed");
+  form.hidden = false;
+  form.onsubmit = event => {
+    event.preventDefault();
+    const box = document.getElementById("text");
+    if (box.value.trim()) turn(box.value.trim());
+    box.value = "";
+  };
+}
+</script>
+</body>
+</html>

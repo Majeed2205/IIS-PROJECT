@@ -20,6 +20,7 @@ from .turnlog import TurnFile, new_log_path, turn_record
 from .understand import unclear, understand
 
 WHICH_PART = "Which part should I change: the service, the day or the time?"
+GREETING = "Hello, Demo Salon. How can I help?"
 GIVE_UP = "I'm sorry, I'm having trouble understanding. I'll ask a member of staff to call you back."
 MAX_NOT_UNDERSTOOD = 3  # turns in a row before handing over (simulated, like the repeat handover)
 
@@ -258,6 +259,19 @@ def read_args(args: list[str]) -> tuple[str, bool, bool]:
     return (words[0] if words else "clarify"), "--mishear" in args, "--log" in args
 
 
+def setup_lines(reader, mishear: bool) -> list[str]:
+    """What the terminal chat and the voice server print about the switch and the reader when they start."""
+    lines = []
+    if mishear:
+        lines.append("Planted-error switch: on. One time you say will be misheard (simulated).")
+    if reader.live:
+        lines.append("Understanding: Claude Haiku 5.5 (live). New answers are saved in data/replays.json.")
+    else:
+        lines.append("Understanding: replay mode (no live calls). Saved model answers are used, "
+                     "and any other sentence goes to the simple keyword reader (simulated).")
+    return lines
+
+
 def main() -> None:
     strategy, mishear, logging = read_args(sys.argv[1:])
     if strategy not in STRATEGIES:
@@ -269,16 +283,11 @@ def main() -> None:
     log = TurnFile(path) if logging else None
     chat = Conversation(Calendar.load(), strategy, call_id=path.stem, reader=reader, mishear=mishear, log=log)
     print(f"Demo Salon booking assistant ({strategy}). Type 'quit' to stop.")
-    if mishear:
-        print("Planted-error switch: on. One time you say will be misheard (simulated).")
+    for line in setup_lines(reader, mishear):
+        print(line)
     if logging:
         print(f"Turn log: on. Every turn is written to logs/{path.name}, including what you type.")
-    if reader.live:
-        print("Understanding: Claude Haiku 5.5 (live). New answers are saved in data/replays.json.")
-    else:
-        print("Understanding: replay mode (no live calls). Saved model answers are used, "
-              "and any other sentence goes to the simple keyword reader (simulated).")
-    print("Assistant: Hello, Demo Salon. How can I help?")
+    print("Assistant:", GREETING)
     while not chat.finished:
         try:
             text = input("You: ")

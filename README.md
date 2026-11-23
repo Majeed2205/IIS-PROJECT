@@ -14,7 +14,7 @@
 | Keyword reader for typed input | `assistant/understand.py` | Simulated: used for a sentence with no saved answer when there is no key, or when a live call fails (a [model] message is printed). Also fills in a detail the model left out (see above) |
 | Planted-error switch: mishears one time on purpose, to show which strategy catches it | `assistant/mishear.py`, `assistant/chat.py` | Simulated (step 5): off unless `--mishear` is given. One exact time per call is heard as the nearest other free time that day ("half five" on Friday as 6:15 pm); the spec says when it waits |
 | Turn logging: one record per turn, for the study | `assistant/turnlog.py`, `assistant/chat.py` | Implemented (step 6): off unless `--log` is given. Each call goes to its own file in `logs/` (ignored by git), one JSON record per line. The records hold what the caller typed, so keep them only with consent |
-| Voice in the browser, standing in for a phone line | | Planned (step 7), simulated |
+| Voice in the browser, standing in for a phone line | `assistant/voice.py`, `assistant/voice.html` | Simulated (step 7): a page on this computer. The browser's speech recognition hears the caller, the same conversation answers, and one of the computer's voices reads the reply (Premium voices sound most natural). Chrome sends the audio to Google, so use made-up details |
 
 ## How to run
 
@@ -24,6 +24,7 @@ python -m assistant.demo
 python -m assistant.chat clarify      # or repeat / summarise
 python -m assistant.chat summarise --mishear   # with the planted-error switch on
 python -m assistant.chat summarise --log       # writes one record per turn to logs/
+python -m assistant.voice summarise            # then open http://localhost:8000 in Chrome or Safari
 ```
 
 The tests and the chat need no key and nothing installed: without a key the
