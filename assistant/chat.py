@@ -1,7 +1,7 @@
 """The conversation loop. Keeps track of the call from turn to turn.
 
-Status: implemented. Typed input in the terminal:  python -m assistant.chat clarify
-The terminal uses the model reader (model.py); the tests use the keyword reader.
+Status: implemented. Typed input in the terminal:  python3 -m assistant.chat clarify
+The terminal uses the model reader (model.py); most tests use the keyword reader.
 With --mishear the planted-error switch (mishear.py, simulated) mishears one time,
 and with --log every turn is recorded in logs/ (turnlog.py).
 """
@@ -135,6 +135,7 @@ class Conversation:
         if action.kind == ASK_AGAIN and not missed:
             self.repeats_asked += 1
         if action.kind == HANDOVER:
+            self.not_understood = 0  # this turn was understood (rule 7)
             self.finished = True
             return action.say
 
@@ -224,6 +225,7 @@ class Conversation:
 
     def book(self, day: str, time: str) -> str:
         """Book through the booking desk and say what really happened."""
+        self.not_understood = 0  # a turn that books was understood (rule 7)
         # Same call and same slot gives the same id, so a repeat is never booked twice.
         request_id = f"{self.call_id}-{day}-{time}"
         result = self.desk.book(request_id, self.request.service, day, time)
@@ -265,7 +267,7 @@ def setup_lines(reader, mishear: bool) -> list[str]:
     if mishear:
         lines.append("Planted-error switch: on. One time you say will be misheard (simulated).")
     if reader.live:
-        lines.append("Understanding: Claude Haiku 5.5 (live). New answers are saved in data/replays.json.")
+        lines.append("Understanding: Claude Haiku 5.5 (live). Each new sentence is sent to Anthropic, and is not saved.")
     else:
         lines.append("Understanding: replay mode (no live calls). Saved model answers are used, "
                      "and any other sentence goes to the simple keyword reader (simulated).")
@@ -275,7 +277,7 @@ def setup_lines(reader, mishear: bool) -> list[str]:
 def main() -> None:
     strategy, mishear, logging = read_args(sys.argv[1:])
     if strategy not in STRATEGIES:
-        print("Usage: python -m assistant.chat [repeat | clarify | summarise] [--mishear] [--log]")
+        print("Usage: python3 -m assistant.chat [repeat | clarify | summarise] [--mishear] [--log]")
         return
 
     reader = ModelReader()

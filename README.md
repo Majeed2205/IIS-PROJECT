@@ -10,28 +10,36 @@
 | Handover to staff after two failed repeats, or three turns in a row that get nowhere (not understood, or no answer to the which-part question) | `assistant/policy.py`, `assistant/chat.py` | Simulated: the assistant says staff will call back; no call happens |
 | Conversation loop (typed input in the terminal) | `assistant/chat.py` | Implemented (step 3) |
 | Understanding step: Claude Haiku 5.5 turns the caller's words into details | `assistant/model.py` | Implemented (step 4). Live calls need an API key; without one it replays saved answers. If the model leaves out a detail of a turn the keyword reader fully understands, the keyword reader fills it in, and it reads a turn that is only a time ("10") when the model is unsure. A "?" turn that does not ask for something ("You said Friday?"), or a question like "OK, is that right", is not understood, whatever the model read (rule 7) |
-| Saved model answers for replay mode | `data/replays.json`, made by `assistant/record.py` | Implemented; the file appears once the answers are recorded with a key |
-| Keyword reader for typed input | `assistant/understand.py` | Simulated: used for a sentence with no saved answer when there is no key, or when a live call fails (a [model] message is printed). Also fills in a detail the model left out (see above) |
+| Saved model answers for replay mode | `data/replays.json`, made by `assistant/record.py` | Implemented: the 48 answers recorded with `assistant/record.py` are committed. The live chat and voice line do not add to it (see the privacy note below) |
+| Keyword reader for typed or spoken turns | `assistant/understand.py` | Simulated: used for a sentence with no saved answer when there is no key, or when a live call fails (a [model] message is printed). Also fills in a detail the model left out (see above) |
 | Planted-error switch: mishears one time on purpose, to show which strategy catches it | `assistant/mishear.py`, `assistant/chat.py` | Simulated (step 5): off unless `--mishear` is given. One exact time per call is heard as the nearest other free time that day ("half five" on Friday as 6:15 pm); the spec says when it waits |
-| Turn logging: one record per turn, for the study | `assistant/turnlog.py`, `assistant/chat.py` | Implemented (step 6): off unless `--log` is given. Each call goes to its own file in `logs/` (ignored by git), one JSON record per line. The records hold what the caller typed, so keep them only with consent |
-| Voice in the browser, standing in for a phone line | `assistant/voice.py`, `assistant/voice.html` | Simulated (step 7): a page on this computer. The browser's speech recognition hears the caller, the same conversation answers, and one of the computer's voices reads the reply (Premium voices sound most natural). Chrome sends the audio to Google, so use made-up details |
+| Turn logging: one record per turn, for the study | `assistant/turnlog.py`, `assistant/chat.py` | Implemented (step 6): off unless `--log` is given. Each call goes to its own file in `logs/` (ignored by git), one JSON record per line. The records hold what the caller typed or said, so keep them only with consent |
+| Voice in the browser, standing in for a phone line | `assistant/voice.py`, `assistant/voice.html` | Simulated (step 7): a page on this computer. The browser's speech recognition hears the caller, the same conversation answers, and one of the computer's voices reads the reply (Premium voices sound most natural). The recogniser may send the audio to the browser maker's servers (Chrome sends it to Google), so use made-up details. In a browser that cannot listen (Firefox) the experimenter types each turn instead |
 
 ## How to run
 
+Run these from the repository root with Python 3.10 or later. On macOS and Linux the
+command is `python3` (on Windows it may be `python` or `py`).
+
 ```
-python -m unittest -v
-python -m assistant.demo
-python -m assistant.chat clarify      # or repeat / summarise
-python -m assistant.chat summarise --mishear   # with the planted-error switch on
-python -m assistant.chat summarise --log       # writes one record per turn to logs/
-python -m assistant.voice summarise            # then open http://localhost:8000 in Chrome or Safari
+python3 -m unittest -v
+python3 -m assistant.demo
+python3 -m assistant.chat clarify      # or repeat / summarise
+python3 -m assistant.chat summarise --mishear   # with the planted-error switch on
+python3 -m assistant.chat summarise --log       # writes one record per turn to logs/
+python3 -m assistant.voice summarise            # then open http://localhost:8000 in Chrome or Safari
 ```
 
 The tests and the chat need no key and nothing installed: without a key the
 assistant runs in replay mode. To use the live model:
 
 ```
-pip install -r requirements.txt       # the anthropic package, the one agreed dependency
+python3 -m pip install -r requirements.txt   # the anthropic package, the one agreed dependency
 cp .env.example .env                  # then put your own key after ANTHROPIC_API_KEY=
-python -m assistant.record            # saves the model's answers in data/replays.json
+python3 -m assistant.record           # saves the model's answers in data/replays.json
 ```
+
+In live mode each new sentence the caller says is sent to Anthropic's API, and by voice
+Chrome also sends the audio to Google. Only `assistant.record` saves answers; the chat and
+the voice line keep a caller's words only in the turn log, when `--log` is on. Use made-up
+details in study calls.

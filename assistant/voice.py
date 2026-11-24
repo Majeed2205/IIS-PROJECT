@@ -4,7 +4,7 @@ Status: simulated. A small web server on this computer shows one page. The brows
 speech recognition turns what the caller says into text, the same Conversation as in the
 terminal answers it, and the browser reads the reply aloud with one of the computer's voices.
 
-Run:  python -m assistant.voice summarise      then open http://localhost:8000 in Chrome or Safari.
+Run:  python3 -m assistant.voice summarise      then open http://localhost:8000 in Chrome or Safari.
 It takes the same --mishear and --log switches as the terminal chat. Only this computer can
 open the page. Chrome sends the caller's audio to Google to recognise it, so use made-up details.
 """
@@ -110,7 +110,7 @@ def make_server(call: VoiceCall, port: int = PORT) -> ThreadingHTTPServer:
 def main() -> None:
     strategy, mishear, logging = read_args(sys.argv[1:])
     if strategy not in STRATEGIES:
-        print("Usage: python -m assistant.voice [repeat | clarify | summarise] [--mishear] [--log]")
+        print("Usage: python3 -m assistant.voice [repeat | clarify | summarise] [--mishear] [--log]")
         return
     reader = ModelReader()
     try:

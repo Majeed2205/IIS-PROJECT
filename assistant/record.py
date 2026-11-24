@@ -1,6 +1,6 @@
 """Record the model's answers for replay mode.  Status: implemented (needs an API key).
 
-Run once with your key in .env:  python -m assistant.record
+Run once with your key in .env:  python3 -m assistant.record
 Each sentence below goes to Claude Haiku 5.5 and its answer is saved in
 data/replays.json, so anyone can replay them later without a key.
 A sentence that is already saved is not sent again. To record again from
@@ -70,10 +70,10 @@ PHRASES = [
 
 
 def main() -> None:
-    reader = ModelReader()
+    reader = ModelReader(save=True)
     if not reader.live:
         print("Live calls are off. Put ANTHROPIC_API_KEY=... in .env (see .env.example), "
-              "run pip install -r requirements.txt, then run this again.")
+              "run python3 -m pip install -r requirements.txt, then run this again.")
         return
     services = Calendar.load().services
     saved = filled = unsure = 0

@@ -2,7 +2,7 @@
 
 Status: simulated. It stands in for a speech recogniser that gets a detail wrong,
 so the study can show which repair strategy catches the mistake. It is off unless
-switched on (python -m assistant.chat summarise --mishear).
+switched on (python3 -m assistant.chat summarise --mishear).
 """
 from __future__ import annotations
 

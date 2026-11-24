@@ -142,6 +142,21 @@ class WordTests(unittest.TestCase):
         self.assertEqual(hear("No, I said Thursday")["day"], "thursday")
         self.assertEqual(hear("No, 6:15")["time"], "18:15")
 
+    def test_a_no_that_says_a_part_is_fine_names_no_part(self):
+        for text in ["No, the time is fine", "No, the time's fine", "No, same time", "No, the day is right"]:
+            self.assertEqual(hear(text)["parts"], [], text)  # rule 6: a plain "no"
+        for text in ["No, wrong time", "No, the time is wrong", "No, the time isn't right", "the time"]:
+            self.assertEqual(hear(text)["parts"], ["time"], text)
+
+    def test_a_turn_of_only_no_words_is_a_plain_no(self):
+        for text in ["Wrong", "Incorrect", "That's wrong", "That's incorrect", "Nope, wrong"]:
+            heard = hear(text)
+            self.assertTrue(heard["no"], text)
+            self.assertFalse(heard["unclear"], text)
+            self.assertTrue(heard_nothing(heard), text)
+        for text in ["Not Friday", "I can't do Monday", "Wrong day, Friday"]:  # these say more than no (rule 7)
+            self.assertTrue(hear(text)["unclear"], text)
+
     def test_a_no_inside_the_sentence_means_we_heard_nothing(self):
         for text in ["I can't do 5:30", "5:30 is too early", "Any day but Friday", "Not Friday",
                      "Just a haircut, no colour", "Thursday please, Monday's no good", "Not in the morning",

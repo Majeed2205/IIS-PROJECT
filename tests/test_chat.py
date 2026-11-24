@@ -748,6 +748,13 @@ class LoopTests(unittest.TestCase):
         said, chat = self.replies("summarise", ["A haircut on Friday at half five", "No, I said Thursday"])
         self.assertNotEqual(said[1], WHICH_PART)  # a new detail is still a correction (rule 5)
 
+    def test_rule_6_words_that_mean_a_plain_no(self):
+        said, chat = self.replies("summarise", ["A haircut on Friday at half five", "No, the time is fine"])
+        self.assertEqual(said[1], WHICH_PART)  # it names the part that is right, not one to change
+        no, chat = self.replies("summarise", ["A haircut on Friday at half five"] + ["No"] * 4)
+        wrong, chat = self.replies("summarise", ["A haircut on Friday at half five"] + ["Wrong"] * 4)
+        self.assertEqual(wrong, no)  # a lone "Wrong" is a plain "no", so it does not hand over sooner
+
     def test_a_pick_with_nothing_to_pick_is_not_understood(self):
         said, chat = self.replies("clarify", ["the first one", "the first one", "the first one"])
         self.assertEqual(said[:2], ["Sorry, I didn't catch that. Which day would you like to come in?"] * 2)

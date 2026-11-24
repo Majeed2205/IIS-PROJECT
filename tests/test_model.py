@@ -345,7 +345,7 @@ class ReplayTests(unittest.TestCase):
             calls.append(text)
             return answer(day="monday")
 
-        reader = ModelReader(live=True, replay_path=self.path, ask=ask)
+        reader = ModelReader(live=True, replay_path=self.path, ask=ask, save=True)  # as record.py does
         reader("Monday please", SERVICES)
         reader("monday   please", SERVICES)
         self.assertEqual(calls, ["Monday please"])  # the second time is a replay
@@ -354,10 +354,23 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(replayed["day"], "monday")
 
     def test_every_live_answer_is_kept(self):
-        reader = ModelReader(live=True, replay_path=self.path, ask=lambda text, services: answer(day="monday"))
+        reader = ModelReader(live=True, replay_path=self.path, ask=lambda text, services: answer(day="monday"), save=True)
         reader("Monday please", SERVICES)
         reader("Monday then", SERVICES)
         self.assertEqual(sorted(json.loads(self.path.read_text())), ["monday please", "monday then"])
+
+    def test_a_live_answer_is_not_saved_unless_asked(self):
+        calls = []
+
+        def ask(text, services):
+            calls.append(text)
+            return answer(day="monday")
+
+        reader = ModelReader(live=True, replay_path=self.path, ask=ask)  # as the chat and the voice line make it
+        reader("Monday please", SERVICES)
+        reader("monday please", SERVICES)
+        self.assertEqual(calls, ["Monday please"])  # kept for this run only
+        self.assertFalse(self.path.exists())  # a caller's words are not written down
 
     def test_a_failed_call_falls_back_and_is_not_saved(self):
         reader = ModelReader(live=True, replay_path=self.path, ask=lambda text, services: None)
@@ -494,7 +507,7 @@ class ChatWithModelTests(unittest.TestCase):
             ("summarise", ["A haircut on Friday at half five", "No"]),
             ("repeat", ["A haircut on Friday after five"]),
         ]
-        not_understood = ["5:30, no wait, 6:15", "I can't do Monday", "I cannot do Monday", "That's incorrect",
+        not_understood = ["5:30, no wait, 6:15", "I can't do Monday", "I cannot do Monday",
                           "I'm busy at 5:30", "Is that Friday?", "You said Friday?", "OK, is that right",
                           "Monday and Tuesday", "Monday 11", "Sometime next week", "Yeah no"]
         # The model says it is unsure, or gives an answer that can't be used.
@@ -624,6 +637,19 @@ class RecordTests(unittest.TestCase):
         self.assertIn("not saved", printed.getvalue())
         self.assertIn("1 of 2 answers are saved", printed.getvalue())
 
+    def test_the_recording_saves_the_answers(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = Path(folder.name) / "replays.json"
+
+        def build(**options):  # record.py's own options, with a fake model instead of a live one
+            return ModelReader(live=True, replay_path=path, ask=lambda text, services: answer(yes=True), **options)
+
+        with mock.patch.object(record, "ModelReader", side_effect=build), mock.patch.object(record, "PHRASES", ["Yes"]), \
+                mock.patch("sys.stdout", io.StringIO()):
+            record.main()
+        self.assertEqual(json.loads(path.read_text()), {"yes": answer(yes=True)})  # only record.py saves
+
     def test_without_live_calls_nothing_is_recorded(self):
         printed = io.StringIO()
         reader = SimpleNamespace(live=False)
@@ -690,7 +716,7 @@ class EnvTests(unittest.TestCase):
 
 # What each recorded phrase should be heard as, following the spec. A detail that is not
 # listed must be empty. ANY marks a detail the spec does not decide, so it is not checked.
-# Checked once the real answers are recorded with a key (python -m assistant.record).
+# Checked once the real answers are recorded with a key (python3 -m assistant.record).
 ANY = "not checked"
 SPEC_READINGS = {
     # The test phrases in the spec
@@ -756,11 +782,11 @@ class RecordedAnswerTests(unittest.TestCase):
     def setUp(self):
         self.replays = load_replays(REPLAY_PATH)
         if not self.replays:
-            self.skipTest("no recorded answers yet (run python -m assistant.record)")
+            self.skipTest("no recorded answers yet (run python3 -m assistant.record)")
 
     def test_every_spec_phrase_has_a_recorded_answer(self):
         missing = [text for text in SPEC_READINGS if text not in self.replays]
-        self.assertEqual(missing, [], "run python -m assistant.record")
+        self.assertEqual(missing, [], "run python3 -m assistant.record")
 
     def test_recorded_answers_are_well_formed(self):
         for text, saved in self.replays.items():

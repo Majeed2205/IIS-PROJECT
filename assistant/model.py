@@ -1,7 +1,7 @@
 """The understanding step: Claude Haiku 5.5 turns the caller's words into details.
 
 Status: implemented. A live call needs an API key in .env (see .env.example)
-and the anthropic package (pip install -r requirements.txt).
+and the anthropic package (python3 -m pip install -r requirements.txt).
 
 Without a key it runs in replay mode: it uses answers the model gave before,
 saved in data/replays.json. A sentence with no saved answer, or a live call
@@ -91,14 +91,15 @@ unclear: set this to true, and leave the other fields empty, if the caller
 class ModelReader:
     """Reads one caller turn: a saved answer, else the model, else the keyword reader."""
 
-    def __init__(self, live: bool | None = None, replay_path: Path = REPLAY_PATH, ask=None):
+    def __init__(self, live: bool | None = None, replay_path: Path = REPLAY_PATH, ask=None, save: bool = False):
         self.replay_path = Path(replay_path)
+        self.save = save  # only record.py saves new answers, so a caller's words are not kept by accident
         self.replays = load_replays(self.replay_path)
         self.live = has_key() if live is None else live
         self.ask = ask if ask is not None else ask_model
         self.source = None  # who read the last turn, for the turn log
         if self.live and ask is None and importlib.util.find_spec("anthropic") is None:
-            warn("The anthropic package is not installed (pip install -r requirements.txt), so replay mode is used.")
+            warn("The anthropic package is not installed (python3 -m pip install -r requirements.txt), so replay mode is used.")
             self.live = False
 
     def __call__(self, text: str, services: list[str], first_turn: bool = False) -> dict:
@@ -109,8 +110,9 @@ class ModelReader:
             answer = self.ask(text, services)
             self.source = "live model"
             if answer is not None:
-                self.replays[key] = answer
-                save_replays(self.replays, self.replay_path)
+                self.replays[key] = answer  # so the same sentence is not asked twice in this run
+                if self.save:
+                    save_replays(self.replays, self.replay_path)
         if answer is None:
             self.source = "keyword reader"
             return understand(text, services, first_turn)  # the simple keyword reader

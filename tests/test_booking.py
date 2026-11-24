@@ -16,7 +16,7 @@ class CalendarTests(unittest.TestCase):
         self.calendar = Calendar.load()
 
     def test_friday_after_five_has_two_free_slots(self):
-        slots = self.calendar.find_free("friday", earliest="17:00")
+        slots = self.calendar.find_free("friday", earliest="17:01")  # "after five" leaves 5 pm out
         self.assertEqual([s.time for s in slots], ["17:30", "18:15"])
 
     def test_saturday_afternoon_has_nothing_free(self):

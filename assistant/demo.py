@@ -1,6 +1,6 @@
 """A short walk through the calendar, booking function and repair policy.  Status: implemented.
 
-Run from the repository root:  python -m assistant.demo
+Run from the repository root:  python3 -m assistant.demo
 """
 from __future__ import annotations
 

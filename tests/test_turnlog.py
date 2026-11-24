@@ -73,6 +73,16 @@ class TurnRecordTests(unittest.TestCase):
         self.assertEqual([record["finished"] for record in log], [False, False, False, False, True, True])
         self.assertIsNone(log[5]["read"])  # the call had ended, so nothing was read
 
+    def test_a_turn_that_books_or_hands_over_starts_the_count_again(self):
+        # Rule 7: any understood turn starts the count again, so the log shows 0 on it.
+        calls = [("clarify", ["A haircut on Friday after five", "I'm busy", "I'm busy", "6:15"], [0, 1, 2, 0]),
+                 ("summarise", ["A haircut on Friday at half five", "I'm busy", "Yes"], [0, 1, 0]),
+                 ("repeat", ["A haircut on Friday after five"] * 2 + ["I'm busy", "A haircut on Friday after five"],
+                  [0, 0, 1, 0])]
+        for strategy, turns, counts in calls:
+            log, replies = logged_call(strategy, turns)
+            self.assertEqual([record["not_understood"] for record in log], counts, strategy)
+
     def test_no_log_unless_one_is_given(self):
         chat = Conversation(Calendar.load(), "summarise")
         chat.reply("A haircut on Friday at half five")
@@ -151,7 +161,7 @@ class TurnFileTests(unittest.TestCase):
 
 class MainTests(unittest.TestCase):
     def run_chat(self, args):
-        """Run python -m assistant.chat with these arguments and one turn, and return the log files it made."""
+        """Run python3 -m assistant.chat with these arguments and one turn, and return the log files it made."""
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         logs = Path(folder.name) / "logs"

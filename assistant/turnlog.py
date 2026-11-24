@@ -1,6 +1,6 @@
 """Turn logging (step 6): one record per caller turn, for the study.
 
-Status: implemented. Off unless switched on (python -m assistant.chat summarise --log).
+Status: implemented. Off unless switched on (python3 -m assistant.chat summarise --log).
 Each call goes to its own file in logs/ (ignored by git), one JSON record per line.
 The records hold what the caller typed, so keep them only with the caller's consent.
 """

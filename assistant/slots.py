@@ -53,7 +53,7 @@ class Calendar:
     def find_free(self, day: str, earliest: str | None = None, latest: str | None = None) -> list[Slot]:
         """Free slots on a day, optionally limited to a time range (inclusive).
 
-        "Friday after five" is find_free("friday", earliest="17:00").
+        "Friday after five" is find_free("friday", earliest="17:01"): it leaves 5 pm out.
         Zero-padded HH:MM strings sort correctly as text.
         """
         day = day.strip().lower()

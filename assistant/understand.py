@@ -1,7 +1,8 @@
-"""Turns what the caller typed into the details the policy needs.
+"""Turns what the caller typed or said into the details the policy needs.
 
 Status: simulated. A simple keyword reader, used when model.py has no saved
-or live model answer for a sentence.
+or live model answer for a sentence. model.py also runs it on every turn,
+to check the model's answer and fill in what it left out (see to_heard).
 
 It only acts on a turn when it knows every word in it. Otherwise it hears
 nothing and the assistant asks again: an extra question is better than a
@@ -72,13 +73,19 @@ def understand(text: str, services: list[str], first_turn: bool = False) -> dict
     starts_with_no = len(words) > 0 and words[0] in ("no", "nope", "nah")
     rest = words[1:] if starts_with_no else words
     heard["no"] = starts_with_no or any(is_negative(word) for word in words)
+    # Rule 6: "No, the time is fine" or "No, same time" names a part that is right, so it is a plain "no".
+    if starts_with_no and not any(is_negative(word) for word in rest) and (
+            "same" in rest or any(word in YES_WORDS for word in rest)):
+        heard["parts"] = []
+    # Rule 6: a turn of only "no" words ("Wrong", "That's incorrect") is a plain "no" too.
+    only_no = len(words) > 0 and all(is_negative(word) or word in ("that", "it", "is") for word in words)
 
     is_question = (len(words) > 0 and words[0] in QUESTION_STARTS) or any(w in QUESTION_WORDS for w in words)
     if asks_about_something(text, words):
         is_question = True
     # We only act on a turn if we know every word in it. A "no" or "not" in the
     # middle is not a known word, because we can't tell what is being turned down.
-    unknown = any(not is_known(word, service_words) for word in rest)
+    unknown = not only_no and any(not is_known(word, service_words) for word in rest)
     if is_question or unknown:
         return unclear(heard)
 
@@ -140,7 +147,7 @@ def understand(text: str, services: list[str], first_turn: bool = False) -> dict
 def find_time(words: list[str]) -> tuple[str | None, str | None]:
     """Find a time like "at seven", "half five", "ten thirty" or "after five".
 
-    Returns ("at", "17:30"), ("after", "17:00"), ("before", "11:59") or (None, None).
+    Returns ("at", "17:30"), ("after", "17:01"), ("before", "11:59") or (None, None).
     Returns ("unclear", None) if two different times are said, or if there is a
     number we can't place, as in "Monday 11" or "three in the afternoon".
     """
