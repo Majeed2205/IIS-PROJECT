@@ -145,7 +145,6 @@ I directed Claude Code through the brief's seven build steps. The spec (`docs/di
 - **AI tool used:** Claude Code (Anthropic), using Claude Opus 5.5 through the Claude desktop application.
 - **How I used AI:** Claude helped me refine and clean up parts of my code, identify bugs, improve code quality and assist with writing and running tests. I reviewed its suggestions before incorporating them into the project.
 - **Documentation:** Claude assisted me with organising and refining parts of the specification, README, report, system diagram and storyboards, which I reviewed and edited.
-- **Verification:** I verified the system through unit tests, regression testing, independent reviews and my own manual testing.
 
 Throughout the project, Claude was used as a supporting tool to assist with development, debugging and testing. I remained responsible for the research, implementation, design decisions and final submitted work.
 
