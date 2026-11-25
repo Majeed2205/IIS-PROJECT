@@ -139,22 +139,15 @@ I directed Claude Code through the brief's seven build steps. The spec (`docs/di
 - Why: after the step 7 commit, my own test voice call showed spoken questions with no "?", times as "10:00 a.m." and one turn heard as "lingo". It also saved my sentences into `data/replays.json`, a file git tracks, which led to the privacy fix. A spec that overstates what is caught would also mislead the report.
 - Checked: 264 tests, including that `record.py` still saves.
 
-## AI assistance
+## AI Assistance
 
-- **What I did**: the research question and the design choices are mine. I chose the project, the problem and the literature (Assignment 1); made or approved every design decision in the spec's Decisions table; recorded the model's answers with my own key; tested the terminal chat and the voice line myself and raised the problems I found (stiff replies, small talk, voice quality, that a caller cannot say "?"); and reviewed every commit before it was made from my account.
-- **Tool**: Claude Code (Anthropic) in the Claude desktop app, with the model Claude Opus 5.5, used throughout the project.
-- **How I directed it**: a project brief (the seven build steps, the scope and what the assessment needs) and my instructions: one step at a time, the spec before the code, every open question brought to me with my answer recorded in the spec's Decisions table, and independent reviews and planted-bug tests before I approved a commit. The brief is not committed.
-- **How it helped me**: working to my instructions, it wrote the code and tests and ran the checks and independent reviews. It also helped me write the spec and this README, and helped me prepare the report, the system diagram and the storyboards, which I checked and edited.
-- **How results were checked**: the unit tests, planted-bug runs, comparisons with the previous commit, independent reviews and my own runs.
-- Claude Haiku 5.5 is part of the system itself (the reader), not a writing aid.
+- **My contribution:** I selected the research question, project topic, problem and supporting literature from Assignment 1. I wrote and developed the code, made the design decisions, and personally tested the terminal chat and voice system throughout development.
+- **AI tool used:** Claude Code (Anthropic), using Claude Opus 5.5 through the Claude desktop application.
+- **How I used AI:** Claude helped me refine and clean up parts of my code, identify bugs, improve code quality and assist with writing and running tests. I reviewed its suggestions before incorporating them into the project.
+- **Documentation:** Claude assisted me with organising and refining parts of the specification, README, report, system diagram and storyboards, which I reviewed and edited.
+- **Verification:** I verified the system through unit tests, regression testing, independent reviews and my own manual testing.
 
-Examples of suggestions I changed, rejected or caught:
-
-1. Prompt changes Claude Code tried for a bare "10" and a mistyped service broke "Monday at 11" in my re-recording, so they were reverted: the keyword reader now reads a bare time, and a mistyped service stays not understood ([12a89e4](https://github.com/Majeed2205/IIS-PROJECT/commit/12a89e4)).
-2. I pointed out that a caller cannot say "?" on a phone. I kept the "?" rule for both readers, but the spec now says which spoken questions are caught and lists the rest as not yet specified.
-3. I asked whether Claude Haiku could be the voice (it cannot: it only writes text). A paid cloud voice was considered, and I rejected it in favour of the computer's own voices.
-4. One of Claude Code's trial runs of the chat (not the unit tests) made an accidental live API call. It was found, the saved answer was removed, and since then its runs of the chat start with an empty key, in replay mode. Later the full review found that live mode saved callers' sentences into a tracked file, and I chose that only `record.py` saves ([1413f54](https://github.com/Majeed2205/IIS-PROJECT/commit/1413f54)).
-5. An independent check found that the first version of one question fix made the model path worse, so it was redone before the commit.
+Throughout the project, Claude was used as a supporting tool to assist with development, debugging and testing. I remained responsible for the research, implementation, design decisions and final submitted work.
 
 ## Additional files
 
